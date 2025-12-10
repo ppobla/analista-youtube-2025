@@ -1,0 +1,1491 @@
+# youtube_automation_ceo.py - SISTEMA COMPLETO COM EXPORTAÇÃO
+import streamlit as st
+from phi.agent import Agent
+from phi.model.deepseek import DeepSeekChat
+from phi.tools.duckduckgo import DuckDuckGo
+from dotenv import load_dotenv  # <--- ESSA LINHA É CRUCIAL
+import os
+import sqlite3
+import json
+from datetime import datetime
+import pandas as pd
+import hashlib
+import re
+import base64
+from io import BytesIO
+
+# Importações Novas (Supabase e Google)
+from supabase import create_client, Client
+from googleapiclient.discovery import build
+
+# ✅ CARREGAR .env (ISSO IMPEDE O ERRO NO SEU PC)
+load_dotenv() 
+
+# 1. CONFIGURAÇÃO DE CHAVES (Com proteção contra erro local)
+def get_secret(key_name):
+    """Tenta pegar do .env primeiro, depois tenta st.secrets"""
+    # 1. Tenta pegar do sistema (.env carregado)
+    value = os.getenv(key_name)
+    if value:
+        return value
+    
+    # 2. Se não achar, tenta st.secrets (mas protege contra erro se não existir)
+    try:
+        if key_name in st.secrets:
+            return st.secrets[key_name]
+    except FileNotFoundError:
+        pass # Ignora erro se não tiver secrets.toml local
+    return None
+
+# Carregar chaves usando a função segura
+DEEPSEEK_API_KEY = get_secret("DEEPSEEK_API_KEY")
+SUPABASE_URL = get_secret("SUPABASE_URL")
+SUPABASE_KEY = get_secret("SUPABASE_KEY")
+YOUTUBE_API_KEY = get_secret("YOUTUBE_API_KEY")
+
+# Validação
+if not all([DEEPSEEK_API_KEY, SUPABASE_URL, SUPABASE_KEY, YOUTUBE_API_KEY]):
+    st.error("⚠️ Faltam chaves de API! Verifique se o arquivo .env está na pasta correta e preenchido.")
+    st.stop()
+
+# Inicializar cliente Supabase Global
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    st.error(f"Erro ao conectar no Supabase: {e}")
+    st.stop()
+
+# ... O RESTO DO CÓDIGO CONTINUA IGUAL ...
+
+# Função para obter ano atual
+def ano_atual():
+    return datetime.now().year
+
+# 2. SISTEMA DE BANCO DE DADOS PARA YOUTUBE AUTOMATION
+class YouTubeAutomationDatabase:
+    """Banco de dados na Nuvem (Supabase)"""
+    
+    def criar_projeto(self, nicho, descricao="Novo Projeto"):
+        codigo = f"YT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        data = {
+            "codigo_projeto": codigo,
+            "nicho": nicho,
+            "descricao": descricao,
+            "data_inicio": datetime.now().isoformat()
+        }
+        # Inserção no Supabase
+        response = supabase.table("projetos").insert(data).execute()
+        # O supabase retorna uma lista de dados inseridos, pegamos o primeiro
+        if response.data:
+            return response.data[0]
+        return None
+    
+    def registrar_analise_nicho(self, projeto_id, ideia_canal, dados_analise):
+        data = {
+            "projeto_id": projeto_id,
+            "ideia_canal": ideia_canal,
+            "concorrentes_analisados": dados_analise.get('concorrentes_analisados', 0),
+            "rpm_medio": dados_analise.get('rpm_medio', 0.0),
+            "concorrencia_nivel": dados_analise.get('concorrencia_nivel', 'MEDIA'),
+            "potencial_lucratividade": dados_analise.get('potencial_lucratividade', 'MODERADO'),
+            "elementos_80_20": dados_analise.get('elementos_80_20', [])
+        }
+        return supabase.table("analises_nicho").insert(data).execute()
+    
+    def registrar_otimizacao(self, projeto_id, dados_otimizacao):
+        data = {
+            "projeto_id": projeto_id,
+            "titulos_virais": dados_otimizacao.get('titulos_virais', []),
+            "thumbnail_desc": dados_otimizacao.get('thumbnail_desc', ''),
+            "keywords": dados_otimizacao.get('keywords', []),
+            "estrategia_ctr": dados_otimizacao.get('estrategia_ctr', ''),
+            "ferramentas_automacao": dados_otimizacao.get('ferramentas_automacao', []),
+            "plano_globalizacao": dados_otimizacao.get('plano_globalizacao', '')
+        }
+        return supabase.table("otimizacoes").insert(data).execute()
+    
+    def listar_projetos(self):
+        # Busca projetos ordenados por data
+        response = supabase.table("projetos").select("*").order("data_inicio", desc=True).execute()
+        if response.data:
+            return pd.DataFrame(response.data)
+        return pd.DataFrame()
+        
+    def obter_historico_projeto(self, projeto_id):
+        # Busca dados relacionados
+        proj = supabase.table("projetos").select("*").eq("id", projeto_id).execute()
+        analises = supabase.table("analises_nicho").select("*").eq("projeto_id", projeto_id).execute()
+        otimizacoes = supabase.table("otimizacoes").select("*").eq("projeto_id", projeto_id).execute()
+        
+        return {
+            "projeto": proj.data[0] if proj.data else {},
+            "analises": analises.data,
+            "otimizacoes": otimizacoes.data
+        }
+# 3. FUNÇÕES DE EXPORTAÇÃO PARA DOC/PDF
+def criar_documento_html(conteudo, tipo_relatorio, projeto_info):
+    """Cria documento HTML formatado para exportação"""
+    
+    ano = ano_atual()
+    
+    # Estilos CSS para o documento
+    css_estilos = """
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20mm;
+            background: #ffffff;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #3b82f6;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3b82f6;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        .project-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid #3b82f6;
+        }
+        .section {
+            margin-bottom: 30px;
+            page-break-inside: avoid;
+        }
+        h1 {
+            color: #1e40af;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 10px;
+            margin-top: 25px;
+        }
+        h2 {
+            color: #374151;
+            margin-top: 20px;
+        }
+        h3 {
+            color: #4b5563;
+        }
+        .agent-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+        .hunter-badge {
+            background: #0f766e;
+            color: white;
+        }
+        .booster-badge {
+            background: #7c3aed;
+            color: white;
+        }
+        .ceo-badge {
+            background: #1e3a8a;
+            color: white;
+        }
+        ul, ol {
+            padding-left: 25px;
+            margin: 10px 0;
+        }
+        li {
+            margin: 5px 0;
+        }
+        .metric-box {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .metric-label {
+            font-weight: bold;
+            color: #0369a1;
+        }
+        .metric-value {
+            font-size: 18px;
+            color: #0c4a6e;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 12px;
+        }
+        .timestamp {
+            color: #9ca3af;
+            font-size: 11px;
+            text-align: right;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th {
+            background: #3b82f6;
+            color: white;
+            padding: 10px;
+            text-align: left;
+        }
+        td {
+            padding: 10px;
+            border: 1px solid #e5e7eb;
+        }
+        tr:nth-child(even) {
+            background: #f9fafb;
+        }
+        .highlight {
+            background: #fef3c7;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+    </style>
+    """
+    
+    # Badge do agente
+    if tipo_relatorio == "hunter":
+        badge_html = '<span class="agent-badge hunter-badge">🔍 ESPECIALISTA HUNTER</span>'
+        titulo_agente = "Relatório de Análise de Nicho"
+    elif tipo_relatorio == "booster":
+        badge_html = '<span class="agent-badge booster-badge">🚀 ESPECIALISTA BOOSTER</span>'
+        titulo_agente = "Relatório de Otimização e SEO"
+    else:
+        badge_html = '<span class="agent-badge ceo-badge">🎯 DECISÃO DO CEO</span>'
+        titulo_agente = "Relatório Executivo de Decisão"
+    
+    # Informações do projeto
+    projeto_html = ""
+    if projeto_info:
+        codigo = projeto_info.get('codigo', projeto_info.get('codigo_projeto', 'N/A'))
+        nicho = projeto_info.get('nicho', 'N/A')
+        projeto_html = f"""
+        <div class="project-info">
+            <div><strong>Projeto:</strong> {codigo}</div>
+            <div><strong>Nicho:</strong> {nicho}</div>
+            <div><strong>Data da Análise:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M')}</div>
+            <div><strong>Ano de Referência:</strong> {ano}</div>
+        </div>
+        """
+    
+    # Estrutura do documento HTML
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{titulo_agente} - {projeto_info.get('codigo', 'Projeto')}</title>
+        {css_estilos}
+    </head>
+    <body>
+        <div class="header">
+            <div class="logo">🎬 YouTube Automation CEO</div>
+            <div class="subtitle">Sistema de Análise e Otimização de Canais</div>
+        </div>
+        
+        {badge_html}
+        <h1>{titulo_agente}</h1>
+        
+        {projeto_html}
+        
+        <div class="timestamp">
+            Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+        </div>
+        
+        <div class="content">
+            {conteudo}
+        </div>
+        
+        <div class="footer">
+            <p>Documento gerado automaticamente pelo Sistema YouTube Automation CEO</p>
+            <p>© {ano} - Todos os direitos reservados</p>
+            <p>Confidencial - Uso interno</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html
+
+def limpar_conteudo_para_exportacao(conteudo):
+    """Limpa metadados e formata para documento"""
+    if not conteudo:
+        return ""
+    
+    # Remover content=' e metadados
+    conteudo_str = str(conteudo)
+    
+    # Remover padrões técnicos
+    padroes_remover = [
+        r"content='(.*?)'",
+        r"name=None.*?\)",
+        r"tool_call_id=.*?\)",
+        r"metrics=\{.*?\}",
+        r"Message\(.*?\)",
+        r"run_id='[^']*'",
+        r"agent_id='[^']*'",
+        r"session_id='[^']*'",
+        r"model='[^']*'",
+        r"defaultdict\(.*?\)",
+        r"content_type='.*?'",
+        r"event='.*?'",
+        r"audio=None.*?videos=None",
+        r"references=None",
+        r"created_at=\d+",
+        r"stop_after_tool_call=False",
+        r"tool_name=None.*?tool_args=None",
+        r"tool_call_error=None.*?extra_data=None"
+    ]
+    
+    for padrao in padroes_remover:
+        conteudo_str = re.sub(padrao, '', conteudo_str, flags=re.DOTALL)
+    
+    # Melhorar formatação markdown para HTML
+    # Títulos
+    conteudo_str = re.sub(r'^# (.*?)$', r'<h1>\1</h1>', conteudo_str, flags=re.MULTILINE)
+    conteudo_str = re.sub(r'^## (.*?)$', r'<h2>\1</h2>', conteudo_str, flags=re.MULTILINE)
+    conteudo_str = re.sub(r'^### (.*?)$', r'<h3>\1</h3>', conteudo_str, flags=re.MULTILINE)
+    
+    # Negrito
+    conteudo_str = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', conteudo_str)
+    
+    # Listas
+    conteudo_str = re.sub(r'^\* (.*?)$', r'<li>\1</li>', conteudo_str, flags=re.MULTILINE)
+    conteudo_str = re.sub(r'^- (.*?)$', r'<li>\1</li>', conteudo_str, flags=re.MULTILINE)
+    conteudo_str = re.sub(r'^\d+\. (.*?)$', r'<li>\1</li>', conteudo_str, flags=re.MULTILINE)
+    
+    # Agrupar listas
+    lines = conteudo_str.split('\n')
+    html_lines = []
+    in_list = False
+    
+    for line in lines:
+        if '<li>' in line:
+            if not in_list:
+                html_lines.append('<ul>')
+                in_list = True
+            html_lines.append(line)
+        else:
+            if in_list:
+                html_lines.append('</ul>')
+                in_list = False
+            html_lines.append(line)
+    
+    if in_list:
+        html_lines.append('</ul>')
+    
+    conteudo_str = '\n'.join(html_lines)
+    
+    # Adicionar divs de seção
+    conteudo_str = re.sub(r'<h2>(.*?)</h2>', 
+                         r'<div class="section"><h2>\1</h2>', 
+                         conteudo_str)
+    
+    # Limpar múltiplas quebras
+    conteudo_str = re.sub(r'\n{3,}', '\n\n', conteudo_str)
+    conteudo_str = re.sub(r'\s{2,}', ' ', conteudo_str)
+    
+    return conteudo_str
+
+def exportar_para_html(conteudo, tipo_relatorio, projeto_info):
+    """Exporta conteúdo para HTML"""
+    conteudo_limpo = limpar_conteudo_para_exportacao(conteudo)
+    html = criar_documento_html(conteudo_limpo, tipo_relatorio, projeto_info)
+    return html
+
+def get_binary_file_downloader_html(bin_data, file_label, file_name):
+    """Cria link de download para arquivo"""
+    b64 = base64.b64encode(bin_data).decode()
+    href = f'<a href="data:application/octet-stream;base64,{b64}" download="{file_name}">{file_label}</a>'
+    return href
+
+def exportar_relatorio(conteudo, tipo_relatorio, projeto_info, formato="html"):
+    """Exporta relatório no formato especificado"""
+    
+    if not conteudo:
+        st.warning("Nenhum conteúdo para exportar")
+        return None
+    
+    try:
+        # Limpar e formatar conteúdo
+        conteudo_limpo = limpar_conteudo_para_exportacao(conteudo)
+        
+        # Nome do arquivo
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        codigo = projeto_info.get('codigo', projeto_info.get('codigo_projeto', 'projeto'))
+        
+        if tipo_relatorio == "hunter":
+            prefixo = "HUNTER"
+        elif tipo_relatorio == "booster":
+            prefixo = "BOOSTER"
+        else:
+            prefixo = "CEO"
+        
+        if formato == "html":
+            # Gerar HTML
+            html_content = criar_documento_html(conteudo_limpo, tipo_relatorio, projeto_info)
+            file_name = f"{prefixo}_{codigo}_{timestamp}.html"
+            
+            # Criar botão de download
+            b64 = base64.b64encode(html_content.encode()).decode()
+            href = f'<a href="data:text/html;base64,{b64}" download="{file_name}" style="text-decoration: none;">'
+            href += f'<button style="background-color: #3b82f6; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 8px;">'
+            href += f'📄 Download HTML</button></a>'
+            
+            st.markdown(href, unsafe_allow_html=True)
+            
+            # Também oferecer visualização
+            with st.expander("📋 Visualizar Documento"):
+                st.components.v1.html(html_content, height=600, scrolling=True)
+            
+            return html_content
+            
+        elif formato == "txt":
+            # Gerar texto puro
+            file_name = f"{prefixo}_{codigo}_{timestamp}.txt"
+            txt_content = f"""
+            ============================================
+            RELATÓRIO {prefixo} - YouTube Automation CEO
+            ============================================
+            
+            Projeto: {codigo}
+            Nicho: {projeto_info.get('nicho', 'N/A')}
+            Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+            Ano: {ano_atual()}
+            
+            {'='*50}
+            
+            {conteudo_limpo}
+            
+            {'='*50}
+            
+            Documento gerado automaticamente
+            Sistema YouTube Automation CEO
+            © {ano_atual()} - Confidencial
+            """
+            
+            # Botão de download
+            st.download_button(
+                label="📝 Download TXT",
+                data=txt_content,
+                file_name=file_name,
+                mime="text/plain",
+                key=f"download_txt_{tipo_relatorio}_{timestamp}"
+            )
+            
+            return txt_content
+            
+    except Exception as e:
+        st.error(f"Erro ao exportar relatório: {e}")
+        return None
+
+# 4. GERENTE EXECUTIVO (CEO)
+@st.cache_resource
+def criar_gerente_executivo():
+    ano = ano_atual()
+    return Agent(
+        model=DeepSeekChat(api_key=DEEPSEEK_API_KEY, temperature=0.7),
+        name="CEO_YouTube_Automation",
+        role="Gerente Executivo de Operações YouTube Cash Cow",
+        description=f"CEO especializado em construir canais dark lucrativos e escaláveis para {ano}",
+        instructions=[
+            f"VOCÊ É O CEO: Tome decisões estratégicas finais baseadas nas análises dos especialistas para {ano}.",
+            "VISÃO MACRO: Avalie ROI, escalabilidade e riscos de cada oportunidade.",
+            "APROVAÇÃO DE NICHOS: Selecione a melhor ideia de canal baseada em dados.",
+            "SÍNTESE: Integre as descobertas do Hunter e do Booster em um plano de ação coeso.",
+            "DECISÃO FINAL: Defina o 'Próximo Passo Imediato' para começar a faturar.",
+            "FOCO EM LUCRO: Priorize oportunidades com alto RPM, baixa concorrência e escalabilidade.",
+            f"ATUALIZAÇÃO: Considere tendências atuais do YouTube em {ano}.",
+            "FORMATO: Use Português claro, estruturado com bullet points e métricas.",
+            "RETORNE APENAS O CONTEÚDO DA RESPOSTA, SEM METADADOS TÉCNICOS."
+        ],
+        tools=[DuckDuckGo()],
+        show_tool_calls=False,
+        markdown=True
+    )
+
+# 5. AGENTES ESPECIALISTAS
+def ferramenta_youtube_search(query: str):
+    """
+    Usa a API oficial do YouTube para encontrar vídeos reais e suas métricas.
+    Útil para validar se um nicho tem visualizações reais recentes.
+    """
+    try:
+        youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
+        
+        # Busca vídeos recentes (publicados este ano)
+        search_response = youtube.search().list(
+            q=query,
+            part='id,snippet',
+            maxResults=5,
+            order='viewCount',
+            type='video',
+            publishedAfter=f'{ano_atual()}-01-01T00:00:00Z'
+        ).execute()
+        
+        resultados = []
+        for item in search_response.get('items', []):
+            video_id = item['id']['videoId']
+            # Pega contagem de views exata
+            stats = youtube.videos().list(part='statistics', id=video_id).execute()
+            if stats['items']:
+                views = stats['items'][0]['statistics'].get('viewCount', '0')
+                resultados.append({
+                    "titulo": item['snippet']['title'],
+                    "canal": item['snippet']['channelTitle'],
+                    "views": f"{int(views):,}",
+                    "publicado_em": item['snippet']['publishedAt'][:10],
+                    "link": f"https://www.youtube.com/watch?v={video_id}"
+                })
+        return json.dumps(resultados, ensure_ascii=False)
+    except Exception as e:
+        return f"Erro na busca do YouTube: {str(e)}"
+def criar_agente_hunter():
+    ano = ano_atual()
+    return Agent(
+        model=DeepSeekChat(api_key=DEEPSEEK_API_KEY, temperature=0.5),
+        name="Hunter_YouTube",
+        role="Especialista em Pesquisa e Modelagem de Conteúdo",
+        instructions=[
+            f"VOCÊ É O HUNTER: Especialista em encontrar oportunidades lucrativas no YouTube para {ano}.",
+            "FUNÇÃO 1 - IDENTIFICAÇÃO DE LUCRATIVIDADE:",
+            "- Use lógica de ferramentas como Social Blade, Google Trends, VidiQ",
+            "- Encontre canais com alto RPM (Revenue Per Mille) e baixa concorrência",
+            f"- Considere tendências atuais de {ano}",
+            "- Prove que a oportunidade é real e escalável com dados",
+            "FUNÇÃO 2 - MÉTODO 80/20:",
+            "- Analise vídeos de sucesso dos concorrentes",
+            "- Identifique os 20% de elementos que geram 80% dos resultados",
+            "- Ganchos (hooks), estrutura de roteiro, ritmo, formato",
+            "- Modele o sucesso, não copie",
+            f"PARA CADA NICHO: Apresente 3 ideias de canais válidas considerando o contexto de {ano}",
+            "FORMATO: Use métricas específicas (RPM estimado, concorrência, potencial)",
+            "RETORNE APENAS O CONTEÚDO DA RESPOSTA, SEM METADADOS TÉCNICOS.",
+            "USE MARKDOWN PARA FORMATAÇÃO, COM CABEÇALHOS, LISTAS E ÊNFASE."
+            # --- LINHA NOVA IMPORTANTE ---
+            "IMPORTANTE: Sempre use a tool 'ferramenta_youtube_search' para validar se o nicho tem views REAIS recentes.", 
+            # -----------------------------
+            
+            "FUNÇÃO 1 - IDENTIFICAÇÃO DE LUCRATIVIDADE:",
+            "- Use lógica de ferramentas como Social Blade, Google Trends, VidiQ",
+            "- Encontre canais com alto RPM (Revenue Per Mille) e baixa concorrência",
+            f"- Considere tendências atuais de {ano}",
+            "- Prove que a oportunidade é real e escalável com dados",
+            "FUNÇÃO 2 - MÉTODO 80/20:",
+            "- Analise vídeos de sucesso dos concorrentes",
+            "- Identifique os 20% de elementos que geram 80% dos resultados",
+            "- Ganchos (hooks), estrutura de roteiro, ritmo, formato",
+            "- Modele o sucesso, não copie",
+            f"PARA CADA NICHO: Apresente 3 ideias de canais válidas considerando o contexto de {ano}",
+            "FORMATO: Use métricas específicas (RPM estimado, concorrência, potencial)",
+            "RETORNE APENAS O CONTEÚDO DA RESPOSTA, SEM METADADOS TÉCNICOS.",
+            "USE MARKDOWN PARA FORMATAÇÃO, COM CABEÇALHOS, LISTAS E ÊNFASE."
+        ],
+        # AQUI ESTÁ CERTO: Passamos a instância do DuckDuckGo e a função do YouTube
+        tools=[DuckDuckGo(), ferramenta_youtube_search], 
+        show_tool_calls=True, # Dica: Deixe True no início para ver se ele está usando a ferramenta
+        markdown=True
+    )
+
+def criar_agente_booster():
+    ano = ano_atual()
+    return Agent(
+        model=DeepSeekChat(api_key=DEEPSEEK_API_KEY, temperature=0.6),
+        name="Booster_YouTube",
+        role="Especialista em SEO, Crescimento e Automação",
+        instructions=[
+            f"VOCÊ É O BOOSTER: Especialista em otimizar e escalar canais YouTube para {ano}.",
+            "FUNÇÃO 3 - SEO E CTR:",
+            "- Domine palavras-chave de alto volume e baixa competição",
+            "- Crie títulos 'clicáveis' (clickbait ético)",
+            "- Descreva thumbnails de alto impacto (cores, emoções, texto)",
+            "- Estruture descrições e tags otimizadas",
+            f"- Considere algoritmos atuais do YouTube em {ano}",
+            "FUNÇÃO 4 - ESCALA GLOBAL E AUTOMAÇÃO:",
+            "- Projete sistemas de piloto automático",
+            "- Recomende ferramentas de IA: roteiro, voz, edição (InVideo, Pictory, etc.)",
+            "- Planeje tradução/dublagem AI para múltiplos idiomas",
+            "- Estruture para subnichos relacionados",
+            f"PARA UMA IDEIA SELECIONADA: Crie plano completo de otimização atualizado para {ano}",
+            "FORMATO: Prático, com exemplos específicos e ferramentas reais",
+            "RETORNE APENAS O CONTEÚDO DA RESPOSTA, SEM METADADOS TÉCNICOS.",
+            "USE MARKDOWN PARA FORMATAÇÃO CLARA E PROFISSIONAL."
+        ]
+    )
+
+# 6. FUNÇÕES DE LIMPEZA E FORMATAÇÃO
+def limpar_resposta_agente(resposta):
+    """Remove metadados técnicos e extrai apenas o conteúdo formatado"""
+    if not resposta:
+        return ""
+    
+    resposta_str = str(resposta)
+    
+    if hasattr(resposta, 'content'):
+        conteudo = resposta.content
+        if conteudo:
+            conteudo = str(conteudo)
+            if conteudo.startswith("content='"):
+                conteudo = conteudo[9:]
+                if conteudo.endswith("'"):
+                    conteudo = conteudo[:-1]
+            return conteudo
+        return ""
+    
+    if resposta_str.startswith("content='"):
+        resposta_str = resposta_str[9:]
+        if resposta_str.endswith("'"):
+            resposta_str = resposta_str[:-1]
+    
+    padroes_tecnicos = [
+        r"name=None.*?created_at=\d+",
+        r"tool_call_id=None.*?stop_after_tool_call=False",
+        r"metrics=\{.*?\}",
+        r"references=None",
+        r"Message\(.*?\)",
+        r"tool_calls=\[.*?\]",
+        r"images=None.*?videos=None",
+        r"audio=None.*?response_audio=None",
+        r"extra_data=None",
+        r"run_id='[^']*'",
+        r"agent_id='[^']*'",
+        r"session_id='[^']*'",
+        r"workflow_id=None",
+        r"model='[^']*'",
+        r"defaultdict\(.*?\)"
+    ]
+    
+    for padrao in padroes_tecnicos:
+        resposta_str = re.sub(padrao, '', resposta_str, flags=re.DOTALL)
+    
+    resposta_str = re.sub(r'\n\s*\n', '\n\n', resposta_str)
+    resposta_str = re.sub(r'\s{2,}', ' ', resposta_str)
+    
+    linhas = resposta_str.split('\n')
+    linhas_limpas = []
+    for linha in linhas:
+        linha = linha.strip()
+        if linha and not any(termo in linha for termo in [
+            'name=', 'tool_', 'metrics=', 'created_at=', 
+            'model=', 'run_id=', 'agent_id=', 'session_id=',
+            'defaultdict', 'content_type=', 'event='
+        ]):
+            linhas_limpas.append(linha)
+    
+    return '\n'.join(linhas_limpas)
+
+def extrair_texto_principal(resposta):
+    """Extrai apenas o texto principal da resposta, removendo metadados"""
+    if not resposta:
+        return ""
+    
+    resposta_str = str(resposta)
+    
+    if "Message(" in resposta_str or "content='" in resposta_str:
+        match = re.search(r"content='(.*?)'(?=, name=|$)", resposta_str, re.DOTALL)
+        if match:
+            return match.group(1)
+        
+        match = re.search(r"content='(.*?)(?=, \w+=|$)", resposta_str, re.DOTALL)
+        if match:
+            return match.group(1)
+    
+    return resposta_str
+
+# 7. SISTEMA DE ORQUESTRAÇÃO
+class SistemaYouTubeAutomation:
+    def __init__(self):
+        self.ceo = criar_gerente_executivo()
+        self.especialistas = {
+            "hunter": criar_agente_hunter(),
+            "booster": criar_agente_booster()
+        }
+    
+    def executar_workflow(self, nicho, db, projeto_id):
+        """Executa o fluxo completo de análise"""
+        
+        ano = ano_atual()
+        resultados = {
+            "nicho": nicho,
+            "ano_analise": ano,
+            "hunter_analysis": None,
+            "booster_optimization": None,
+            "ceo_verdict": None
+        }
+        
+        # PASSO 1: Análise do Hunter
+        with st.spinner("🔍 Hunter analisando oportunidades..."):
+            hunter_prompt = f"""
+            NICHO: {nicho}
+            ANO: {ano}
+            
+            Como Agente Hunter, forneça uma análise estruturada em MARKDOWN com:
+            
+            ## 🎯 CONTEXTO DO NICHO
+            Breve introdução sobre o nicho em {ano}
+            
+            ## 📊 3 IDEIAS DE CANAIS
+            
+            ### IDEIA 1: [Nome do Canal]
+            - **RPM Estimado:** [valor]
+            - **Concorrência:** [Baixa/Média/Alta]
+            - **Potencial Mensal:** [valor]
+            - **Elementos 80/20:**
+              1. [Elemento 1]
+              2. [Elemento 2]
+            - **Justificativa:** [explicação]
+            
+            ### IDEIA 2: [Nome do Canal]
+            [mesma estrutura]
+            
+            ### IDEIA 3: [Nome do Canal]
+            [mesma estrutura]
+            
+            ## 📈 CONCLUSÃO
+            Resumo das oportunidades mais promissoras.
+            
+            Use formatação markdown clara e evite metadados técnicos."""
+            
+            hunter_response = self.especialistas["hunter"].run(hunter_prompt)
+            resultados["hunter_analysis"] = extrair_texto_principal(hunter_response)
+        
+        # Extrair a melhor ideia do Hunter para o Booster
+        melhor_ideia = self._extrair_melhor_ideia(resultados["hunter_analysis"])
+        
+        # PASSO 2: Otimização do Booster
+        with st.spinner("🚀 Booster otimizando e escalando..."):
+            booster_prompt = f"""
+            IDEIA DE CANAL SELECIONADA: {melhor_ideia}
+            NICHO: {nicho}
+            ANO: {ano}
+            
+            Como Agente Booster, forneça um plano de otimização em MARKDOWN com:
+            
+            ## 🎯 SEO E OTIMIZAÇÃO DE CTR
+            
+            ### 5 TÍTULOS VIRAIS
+            1. [Título 1]
+            2. [Título 2]
+            
+            ### IDEIAS DE THUMBNAIL
+            • [Descrição thumbnail 1]
+            • [Descrição thumbnail 2]
+            
+            ### PALAVRAS-CHAVE ESTRATÉGICAS
+            - [Keyword 1]
+            - [Keyword 2]
+            
+            ## 🤖 ESTRATÉGIA DE AUTOMAÇÃO
+            
+            ### FERRAMENTAS RECOMENDADAS ({ano})
+            • Roteiro: [ferramenta]
+            • Voz: [ferramenta]
+            • Edição: [ferramenta]
+            
+            ### PLANO DE EXPANSÃO
+            • Tradução para [idiomas]
+            • Subnichos relacionados
+            
+            Use formatação markdown limpa e prática."""
+            
+            booster_response = self.especialistas["booster"].run(booster_prompt)
+            resultados["booster_optimization"] = extrair_texto_principal(booster_response)
+        
+        # PASSO 3: Veredito do CEO
+        with st.spinner("🎯 CEO tomando decisão final..."):
+            ceo_prompt = f"""
+            RELATÓRIO EXECUTIVO - DECISÃO CEO {ano}
+            
+            **NICHO:** {nicho}
+            
+            **ANÁLISE DO HUNTER:**
+            {resultados['hunter_analysis'][:1000]}...
+            
+            **OTIMIZAÇÃO DO BOOSTER:**
+            {resultados['booster_optimization'][:1000]}...
+            
+            Como CEO, forneça uma decisão final em MARKDOWN estruturada:
+            
+            ## 📊 RESUMO EXECUTIVO
+            - Oportunidade principal
+            - ROI Estimado
+            - Timeline
+            
+            ## ⚠️ ANÁLISE DE RISCOS
+            - Principais desafios
+            - Mitigações
+            
+            ## 🚀 PRÓXIMO PASSO IMEDIATO
+            - Ação concreta para hoje
+            - Investimento inicial
+            - Primeira semana
+            
+            ## ✅ DECISÃO FINAL
+            - Aprovação (SIM/NÃO)
+            - Justificativa
+            
+            Seja direto, profissional e focado em ação."""
+            
+            ceo_response = self.ceo.run(ceo_prompt)
+            resultados["ceo_verdict"] = extrair_texto_principal(ceo_response)
+        
+        return resultados
+    
+    def _extrair_melhor_ideia(self, hunter_analysis):
+        """Extrai a primeira/melhor ideia da análise do Hunter"""
+        if not hunter_analysis:
+            return "Canal Principal do Nicho"
+        
+        lines = str(hunter_analysis).split('\n')
+        for i, line in enumerate(lines):
+            line_lower = line.lower()
+            if any(marker in line_lower for marker in ['ideia 1', 'primeira ideia', '1.', '### ideia 1']):
+                descricao = []
+                for j in range(i + 1, min(i + 10, len(lines))):
+                    next_line = lines[j].strip()
+                    if next_line and not any(next_marker in next_line.lower() for next_marker in ['ideia 2', '2.', '### ideia 2']):
+                        descricao.append(next_line)
+                    else:
+                        break
+                if descricao:
+                    return f"{line.strip()} - {' '.join(descricao[:3])}"
+                return line.strip()
+        
+        for line in lines:
+            if line.strip() and len(line.strip()) > 10:
+                return line.strip()[:100]
+        
+        return "Canal Principal do Nicho"
+
+# 8. FUNÇÕES AUXILIARES
+def _extrair_primeira_ideia(texto):
+    """Função auxiliar para extrair primeira ideia"""
+    if not texto:
+        return "Ideia Principal"
+    
+    linhas = str(texto).split('\n')
+    for linha in linhas:
+        linha_lower = linha.lower()
+        if any(marker in linha_lower for marker in ['ideia 1', 'primeira', '1.', '###']):
+            return linha[:100].strip()
+    return "Ideia Principal"
+
+def _extrair_acao_imediata(texto):
+    """Função auxiliar para extrair ação imediata"""
+    if not texto:
+        return "Começar produção do primeiro vídeo"
+    
+    linhas = str(texto).split('\n')
+    for i, linha in enumerate(linhas):
+        linha_lower = linha.lower()
+        if 'próximo passo' in linha_lower or 'imediat' in linha_lower or 'ação' in linha_lower:
+            for j in range(i, min(i + 5, len(linhas))):
+                acao_linha = linhas[j].strip()
+                if acao_linha and not acao_linha.startswith('#'):
+                    return acao_linha
+            return linha.strip()
+    return "Começar produção do primeiro vídeo"
+
+def gerar_prompt_sugestao_nicho():
+    """Gera prompt dinâmico para sugestão de nicho"""
+    ano = ano_atual()
+    return f"""Sugira 3 nichos com alto potencial para YouTube Automation em {ano}. 
+    Considere:
+    1. Tendências atuais do YouTube em {ano}
+    2. RPM (Revenue Per Mille) estimado
+    3. Nível de concorrência atual
+    
+    **Retorne apenas o melhor nicho** com formato:
+    
+    🎯 **MELHOR NICHO PARA {ano}:**
+    [Nome do Nicho]
+    
+    📊 **MOTIVOS:**
+    • [Razão 1]
+    • [Razão 2]
+    
+    Evite metadados técnicos na resposta."""
+
+# 9. FUNÇÃO PRINCIPAL STREAMLIT
+def main():
+    st.set_page_config(
+        page_title="YouTube Automation CEO",
+        page_icon="🎬",
+        layout="wide"
+    )
+    
+    # CSS personalizado
+    st.markdown("""
+    <style>
+    /* Contêineres dos agentes */
+    .hunter-container {
+        background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+        padding: 1.5rem;
+        border-radius: 15px;
+        color: white;
+        margin-bottom: 1rem;
+        border-left: 6px solid #10b981;
+    }
+    
+    .booster-container {
+        background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+        padding: 1.5rem;
+        border-radius: 15px;
+        color: white;
+        margin-bottom: 1rem;
+        border-left: 6px solid #8b5cf6;
+    }
+    
+    .ceo-container {
+        background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+        padding: 1.5rem;
+        border-radius: 15px;
+        color: white;
+        margin-bottom: 1rem;
+        border-left: 6px solid #f59e0b;
+    }
+    
+    /* Estilos para markdown dentro dos contêineres */
+    .hunter-container h1, .hunter-container h2, .hunter-container h3 {
+        color: #a7f3d0 !important;
+    }
+    
+    .booster-container h1, .booster-container h2, .booster-container h3 {
+        color: #ddd6fe !important;
+    }
+    
+    .ceo-container h1, .ceo-container h2, .ceo-container h3 {
+        color: #fef3c7 !important;
+    }
+    
+    /* Cards de métricas */
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.2rem;
+        border-radius: 12px;
+        color: white;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .ano-atual {
+        color: #f59e0b;
+        font-weight: bold;
+        background: rgba(245, 158, 11, 0.1);
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+    
+    /* Botões de exportação */
+    .export-buttons {
+        display: flex;
+        gap: 10px;
+        margin: 15px 0;
+        flex-wrap: wrap;
+    }
+    
+    .export-btn {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        transition: background 0.3s;
+    }
+    
+    .export-btn:hover {
+        background: #2563eb;
+    }
+    
+    /* Melhorar a legibilidade geral */
+    .stMarkdown {
+        line-height: 1.6;
+    }
+    
+    .stMarkdown p {
+        margin-bottom: 0.8rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # INICIALIZAR BANCO DE DADOS
+    if "db" not in st.session_state:
+        st.session_state.db = YouTubeAutomationDatabase()
+    
+    # INICIALIZAR SISTEMA
+    if "sistema" not in st.session_state:
+        st.session_state.sistema = SistemaYouTubeAutomation()
+    
+    # HEADER
+    ano = ano_atual()
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.title("🎬 YouTube Automation CEO")
+        st.markdown(f"### Sistema Completo de Análise • <span class='ano-atual'>{ano}</span>", 
+                   unsafe_allow_html=True)
+    
+    # SIDEBAR
+    with st.sidebar:
+        st.header(f"📊 CONTROLE DE PROJETOS")
+        
+        # Inicializar variáveis de sessão
+        if "projeto_atual" not in st.session_state:
+            st.session_state.projeto_atual = None
+            st.session_state.workflow_resultados = None
+            st.session_state.historico_projeto = None
+        
+        if "nicho_sugerido" not in st.session_state:
+            st.session_state.nicho_sugerido = None
+        
+        # Mostrar projeto atual
+        if st.session_state.projeto_atual:
+            if isinstance(st.session_state.projeto_atual, dict):
+                codigo = st.session_state.projeto_atual.get('codigo', 'N/A')
+                nicho = st.session_state.projeto_atual.get('nicho', 'N/A')
+            else:
+                codigo = st.session_state.projeto_atual.get('codigo_projeto', 'N/A')
+                nicho = st.session_state.projeto_atual.get('nicho', 'N/A')
+            
+            st.success(f"**Projeto Ativo:**\n{codigo}")
+            st.caption(f"**Nicho:** {nicho}")
+        else:
+            st.info("⚠️ Nenhum projeto ativo")
+        
+        st.divider()
+        
+        # Novo projeto
+        st.subheader("🚀 Novo Projeto")
+        
+        nicho_input = st.text_input("Digite um nicho:", placeholder="Ex: Finanças Pessoais, DIY, ASMR")
+        
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("🎯 Analisar Nicho", use_container_width=True):
+                if nicho_input.strip():
+                    novo_projeto = st.session_state.db.criar_projeto(
+                        nicho=nicho_input.strip(),
+                        descricao=f"Análise de nicho: {nicho_input} - {ano}"
+                    )
+                    st.session_state.projeto_atual = novo_projeto
+                    st.session_state.workflow_resultados = None
+                    st.session_state.historico_projeto = None
+                    st.rerun()
+                else:
+                    st.warning("Digite um nicho primeiro!")
+        
+        with col_btn2:
+            if st.button("🔍 Sugerir Nicho", use_container_width=True):
+                with st.spinner(f"Buscando oportunidades para {ano}..."):
+                    try:
+                        prompt = gerar_prompt_sugestao_nicho()
+                        nicho_sugerido = st.session_state.sistema.ceo.run(prompt)
+                        nicho_sugerido_limpo = extrair_texto_principal(nicho_sugerido)
+                        st.session_state.nicho_sugerido = nicho_sugerido_limpo
+                    except Exception as e:
+                        st.error(f"Erro ao sugerir nicho: {e}")
+                        st.session_state.nicho_sugerido = f"Finanças Pessoais Digitais (alto RPM {ano})"
+        
+        if st.session_state.nicho_sugerido:
+            st.markdown("**🎁 Nicho Sugerido:**")
+            st.write(st.session_state.nicho_sugerido)
+            if st.button("✅ Usar Este Nicho"):
+                nicho_texto = st.session_state.nicho_sugerido.strip()
+                if nicho_texto:
+                    linhas = nicho_texto.split('\n')
+                    nome_nicho = linhas[0].replace('🎯', '').replace('**', '').strip()
+                    
+                    novo_projeto = st.session_state.db.criar_projeto(
+                        nicho=nome_nicho[:100],
+                        descricao=f"Nicho sugerido pelo CEO - {ano}"
+                    )
+                    st.session_state.projeto_atual = novo_projeto
+                    st.session_state.workflow_resultados = None
+                    st.session_state.historico_projeto = None
+                    st.session_state.nicho_sugerido = None
+                    st.rerun()
+        
+        st.divider()
+        
+        # Projetos anteriores
+        st.subheader("📚 Projetos Anteriores")
+        projetos_df = st.session_state.db.listar_projetos()
+        
+        if not projetos_df.empty:
+            for _, projeto in projetos_df.head(5).iterrows():
+                projeto_dict = projeto.to_dict()
+                btn_label = f"📁 {projeto_dict.get('codigo_projeto', 'Projeto')}"
+                if st.button(btn_label, key=f"proj_{projeto_dict['id']}"):
+                    st.session_state.projeto_atual = projeto_dict
+                    try:
+                        historico = st.session_state.db.obter_historico_projeto(projeto_dict['id'])
+                        st.session_state.historico_projeto = historico
+                    except Exception as e:
+                        st.error(f"Erro ao carregar histórico: {e}")
+                    st.rerun()
+        else:
+            st.caption("📭 Nenhum projeto salvo")
+    
+    # CONTEÚDO PRINCIPAL
+    if not st.session_state.projeto_atual:
+        # Tela inicial
+        st.markdown("## 🎯 Bem-vindo, CEO!")
+        
+        col_intro1, col_intro2 = st.columns(2)
+        
+        with col_intro1:
+            st.markdown(f"""
+            ### Sua Equipe de Elite ({ano}):
+            
+            **🎩 CEO (Você)** 
+            Decisão estratégica final
+            
+            **🔍 HUNTER** 
+            Encontra oportunidades lucrativas
+            • Identifica nichos com alto RPM
+            • Aplica método 80/20
+            • Valida concorrência atual
+            
+            **🚀 BOOSTER** 
+            Otimiza e escala
+            • SEO e CTR máximo
+            • Automação com IA
+            • Globalização do conteúdo
+            
+            ### 📈 Métricas Alvo:
+            • RPM: $3-$15+
+            • Concorrência: Baixa/Média
+            • ROI: 200%+ em 90 dias
+            """)
+        
+        with col_intro2:
+            st.markdown(f"""
+            ### 🚀 Como Começar:
+            
+            1. **Digite um nicho** na sidebar
+               - Ou peça uma sugestão atualizada
+            
+            2. **Execute a análise completa**
+               - Hunter encontra 3 oportunidades
+               - Booster otimiza a melhor
+               - Você decide o próximo passo
+            
+            3. **Comece a faturar**
+               - Plano de ação imediato
+               - Ferramentas recomendadas
+               - Timeline realista
+            
+            ### 💡 Nichos Quentes {ano}:
+            • Finanças Pessoais Digitais
+            • Saúde Mental & Bem-estar
+            • DIY & Life Hacks com IA
+            • Educação Alternativa Online
+            • Conteúdo ASMR/Relaxamento
+            """)
+        
+        st.divider()
+        st.info(f"💡 **Dica:** Use a barra lateral para começar seu primeiro projeto em {ano}!")
+    
+    else:
+        # Projeto ativo
+        if isinstance(st.session_state.projeto_atual, dict):
+            projeto = st.session_state.projeto_atual
+            codigo = projeto.get('codigo', projeto.get('codigo_projeto', 'N/A'))
+            nicho = projeto.get('nicho', 'N/A')
+            projeto_id = projeto.get('id')
+        else:
+            projeto = st.session_state.projeto_atual
+            codigo = projeto.get('codigo_projeto', 'N/A')
+            nicho = projeto.get('nicho', 'N/A')
+            projeto_id = projeto.get('id')
+        
+        # Header do projeto
+        st.markdown(f"""
+        ## 🎬 Projeto: **{codigo}**
+        ### Nicho: **{nicho}**
+        ### 🗓️ Análise: **{ano}**
+        """)
+        
+        # Botão para executar workflow
+        if st.button(f"▶️ EXECUTAR ANÁLISE COMPLETA", type="primary", use_container_width=True):
+            with st.spinner(f"Orquestrando equipe de elite para {ano}..."):
+                try:
+                    resultados = st.session_state.sistema.executar_workflow(
+                        nicho=nicho,
+                        db=st.session_state.db,
+                        projeto_id=projeto_id
+                    )
+                    
+                    st.session_state.workflow_resultados = resultados
+                    st.success(f"✅ Análise completa executada!")
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Erro ao executar análise: {str(e)}")
+        
+        # Mostrar resultados se existirem
+        if st.session_state.get('workflow_resultados'):
+            resultados = st.session_state.workflow_resultados
+            
+            # Criar abas para cada etapa
+            tab1, tab2, tab3 = st.tabs([f"🔍 HUNTER", f"🚀 BOOSTER", f"🎯 CEO"])
+            
+            with tab1:
+                st.markdown(f"### 🔍 Análise do Hunter - {ano}")
+                hunter_content = resultados.get("hunter_analysis", "")
+                if hunter_content:
+                    # Contêiner estilizado
+                    st.markdown(f"""
+                    <div class='hunter-container'>
+                    {hunter_content}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # BOTÕES DE EXPORTAÇÃO PARA HUNTER
+                    st.markdown("---")
+                    st.markdown("### 📤 Exportar Relatório Hunter")
+                    col_h1, col_h2 = st.columns(2)
+                    
+                    with col_h1:
+                        if st.button("📄 Exportar para HTML", key="export_hunter_html"):
+                            html_content = exportar_relatorio(
+                                hunter_content, 
+                                "hunter", 
+                                projeto,
+                                formato="html"
+                            )
+                    
+                    with col_h2:
+                        if st.button("📝 Exportar para TXT", key="export_hunter_txt"):
+                            exportar_relatorio(
+                                hunter_content, 
+                                "hunter", 
+                                projeto,
+                                formato="txt"
+                            )
+                else:
+                    st.warning("Nenhuma análise disponível")
+            
+            with tab2:
+                st.markdown(f"### 🚀 Otimização do Booster - {ano}")
+                booster_content = resultados.get("booster_optimization", "")
+                if booster_content:
+                    st.markdown(f"""
+                    <div class='booster-container'>
+                    {booster_content}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # BOTÕES DE EXPORTAÇÃO PARA BOOSTER
+                    st.markdown("---")
+                    st.markdown("### 📤 Exportar Relatório Booster")
+                    col_b1, col_b2 = st.columns(2)
+                    
+                    with col_b1:
+                        if st.button("📄 Exportar para HTML", key="export_booster_html"):
+                            exportar_relatorio(
+                                booster_content, 
+                                "booster", 
+                                projeto,
+                                formato="html"
+                            )
+                    
+                    with col_b2:
+                        if st.button("📝 Exportar para TXT", key="export_booster_txt"):
+                            exportar_relatorio(
+                                booster_content, 
+                                "booster", 
+                                projeto,
+                                formato="txt"
+                            )
+                else:
+                    st.warning("Nenhuma otimização disponível")
+            
+            with tab3:
+                st.markdown(f"### 🎯 Veredito do CEO - {ano}")
+                ceo_content = resultados.get("ceo_verdict", "")
+                if ceo_content:
+                    st.markdown(f"""
+                    <div class='ceo-container'>
+                    {ceo_content}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # BOTÕES DE EXPORTAÇÃO PARA CEO
+                    st.markdown("---")
+                    st.markdown("### 📤 Exportar Relatório CEO")
+                    col_c1, col_c2 = st.columns(2)
+                    
+                    with col_c1:
+                        if st.button("📄 Exportar para HTML", key="export_ceo_html"):
+                            exportar_relatorio(
+                                ceo_content, 
+                                "ceo", 
+                                projeto,
+                                formato="html"
+                            )
+                    
+                    with col_c2:
+                        if st.button("📝 Exportar para TXT", key="export_ceo_txt"):
+                            exportar_relatorio(
+                                ceo_content, 
+                                "ceo", 
+                                projeto,
+                                formato="txt"
+                            )
+                else:
+                    st.warning("Nenhum veredito disponível")
+            
+            # Plano de ação resumido
+            st.divider()
+            st.markdown("## 📋 Plano de Ação Resumido")
+            
+            col_passo1, col_passo2, col_passo3 = st.columns(3)
+            
+            with col_passo1:
+                st.markdown("""
+                ### 🗓️ Semana 1
+                • Definir nome do canal
+                • Criar artes (logo, banner)
+                • Configurar ferramentas
+                • Produzir primeiro vídeo
+                """)
+            
+            with col_passo2:
+                st.markdown("""
+                ### 🎬 Semana 2-3
+                • Produzir 3 vídeos piloto
+                • Testar diferentes ganchos
+                • Otimizar baseado em dados
+                • Iniciar SEO básico
+                """)
+            
+            with col_passo3:
+                st.markdown("""
+                ### 📈 Semana 4+
+                • Escalar produção
+                • Expandir para subnichos
+                • Testar monetização
+                • Analisar métricas
+                """)
+            
+            # Exportação completa do projeto
+            st.markdown("---")
+            st.markdown("### 💾 Exportação Completa do Projeto")
+            
+            col_full1, col_full2 = st.columns(2)
+            
+            with col_full1:
+                if st.button("📦 Exportar Projeto Completo (HTML)", key="export_full_html"):
+                    # Combinar todos os relatórios
+                    full_content = f"""
+                    # RELATÓRIO COMPLETO DO PROJETO
+                    
+                    ## 🔍 ANÁLISE DO HUNTER
+                    {hunter_content}
+                    
+                    ---
+                    
+                    ## 🚀 OTIMIZAÇÃO DO BOOSTER
+                    {booster_content}
+                    
+                    ---
+                    
+                    ## 🎯 DECISÃO DO CEO
+                    {ceo_content}
+                    """
+                    
+                    exportar_relatorio(
+                        full_content, 
+                        "full", 
+                        projeto,
+                        formato="html"
+                    )
+            
+            with col_full2:
+                if st.button("📋 Exportar Dados do Projeto (JSON)", key="export_full_json"):
+                    try:
+                        historico = st.session_state.db.obter_historico_projeto(projeto_id)
+                        historico['metadata'] = {
+                            'ano_analise': ano,
+                            'data_exportacao': datetime.now().isoformat(),
+                            'versao_sistema': '1.2'
+                        }
+                        
+                        json_data = json.dumps(historico, ensure_ascii=False, indent=2)
+                        st.download_button(
+                            label="⬇️ Baixar JSON",
+                            data=json_data,
+                            file_name=f"{codigo}_completo_{ano}.json",
+                            mime="application/json",
+                            key="download_json_full"
+                        )
+                    except Exception as e:
+                        st.error(f"Erro ao exportar: {e}")
+        
+        else:
+            # Instruções antes da análise
+            st.info(f"""
+            ### ⏳ Pronto para análise ({ano})!
+            
+            Clique no botão **"EXECUTAR ANÁLISE COMPLETA"** acima para:
+            
+            1. **Hunter** encontrar 3 oportunidades no nicho
+            2. **Booster** otimizar a melhor ideia  
+            3. **CEO** tomar a decisão final
+            
+            ⏱️ Tempo estimado: 2-3 minutos
+            
+            ### 📊 O que você receberá:
+            • 3 ideias de canais com métricas
+            • Títulos virais e thumbnails
+            • Plano de SEO completo
+            • Estratégia de automação
+            • Decisão final do CEO
+            """)
+    
+    # RODAPÉ
+    st.divider()
+    col_foot1, col_foot2, col_foot3 = st.columns(3)
+    
+    with col_foot1:
+        st.caption(f"🎬 **YouTube Automation CEO • {ano}**")
+    
+    with col_foot2:
+        if st.session_state.projeto_atual:
+            if isinstance(st.session_state.projeto_atual, dict):
+                codigo = st.session_state.projeto_atual.get('codigo', 'N/A')
+            else:
+                codigo = st.session_state.projeto_atual.get('codigo_projeto', 'N/A')
+            st.caption(f"📁 **Projeto:** {codigo}")
+        else:
+            st.caption("📁 **Status:** Sem projeto ativo")
+    
+    with col_foot3:
+        st.caption(f"🚀 **Versão 1.2 • Com Exportação • {ano}**")
+
+if __name__ == "__main__":
+    main()

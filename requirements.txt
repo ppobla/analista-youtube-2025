@@ -1,0 +1,9 @@
+streamlit
+phidata
+pandas
+python-dotenv
+supabase
+google-api-python-client
+duckduckgo-search
+openai
+packaging
