@@ -128,7 +128,7 @@ def criar_documento_html(conteudo, tipo_relatorio, projeto_info):
     
     ano = ano_atual()
     
-    # Estilos CSS para o documento
+    # Estilos CSS para o documento (COM A COR DO COPYWRITER ADICIONADA)
     css_estilos = """
     <style>
         body {
@@ -152,10 +152,7 @@ def criar_documento_html(conteudo, tipo_relatorio, projeto_info):
             color: #3b82f6;
             margin-bottom: 10px;
         }
-        .subtitle {
-            color: #666;
-            font-size: 14px;
-        }
+        .subtitle { color: #666; font-size: 14px; }
         .project-info {
             background: #f8f9fa;
             padding: 15px;
@@ -163,23 +160,12 @@ def criar_documento_html(conteudo, tipo_relatorio, projeto_info):
             margin-bottom: 25px;
             border-left: 4px solid #3b82f6;
         }
-        .section {
-            margin-bottom: 30px;
-            page-break-inside: avoid;
-        }
-        h1 {
-            color: #1e40af;
-            border-bottom: 2px solid #e5e7eb;
-            padding-bottom: 10px;
-            margin-top: 25px;
-        }
-        h2 {
-            color: #374151;
-            margin-top: 20px;
-        }
-        h3 {
-            color: #4b5563;
-        }
+        .section { margin-bottom: 30px; page-break-inside: avoid; }
+        h1 { color: #1e40af; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; margin-top: 25px; }
+        h2 { color: #374151; margin-top: 20px; }
+        h3 { color: #4b5563; }
+        
+        /* BADGES DOS AGENTES */
         .agent-badge {
             display: inline-block;
             padding: 4px 12px;
@@ -188,40 +174,13 @@ def criar_documento_html(conteudo, tipo_relatorio, projeto_info):
             font-size: 12px;
             margin-bottom: 10px;
         }
-        .hunter-badge {
-            background: #0f766e;
-            color: white;
-        }
-        .booster-badge {
-            background: #7c3aed;
-            color: white;
-        }
-        .ceo-badge {
-            background: #1e3a8a;
-            color: white;
-        }
-        ul, ol {
-            padding-left: 25px;
-            margin: 10px 0;
-        }
-        li {
-            margin: 5px 0;
-        }
-        .metric-box {
-            background: #f0f9ff;
-            border: 1px solid #bae6fd;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 15px 0;
-        }
-        .metric-label {
-            font-weight: bold;
-            color: #0369a1;
-        }
-        .metric-value {
-            font-size: 18px;
-            color: #0c4a6e;
-        }
+        .hunter-badge { background: #0f766e; color: white; }
+        .booster-badge { background: #7c3aed; color: white; }
+        .ceo-badge { background: #1e3a8a; color: white; }
+        .copy-badge { background: #be185d; color: white; } /* <--- NOVA COR ROSA */
+        
+        ul, ol { padding-left: 25px; margin: 10px 0; }
+        li { margin: 5px 0; }
         .footer {
             text-align: center;
             margin-top: 50px;
@@ -230,47 +189,25 @@ def criar_documento_html(conteudo, tipo_relatorio, projeto_info):
             color: #6b7280;
             font-size: 12px;
         }
-        .timestamp {
-            color: #9ca3af;
-            font-size: 11px;
-            text-align: right;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 15px 0;
-        }
-        th {
-            background: #3b82f6;
-            color: white;
-            padding: 10px;
-            text-align: left;
-        }
-        td {
-            padding: 10px;
-            border: 1px solid #e5e7eb;
-        }
-        tr:nth-child(even) {
-            background: #f9fafb;
-        }
-        .highlight {
-            background: #fef3c7;
-            padding: 2px 4px;
-            border-radius: 4px;
-        }
+        .timestamp { color: #9ca3af; font-size: 11px; text-align: right; }
     </style>
     """
     
-    # Badge do agente
+    # Lógica do Badge (ATUALIZADA PARA O COPYWRITER)
     if tipo_relatorio == "hunter":
         badge_html = '<span class="agent-badge hunter-badge">🔍 ESPECIALISTA HUNTER</span>'
         titulo_agente = "Relatório de Análise de Nicho"
     elif tipo_relatorio == "booster":
         badge_html = '<span class="agent-badge booster-badge">🚀 ESPECIALISTA BOOSTER</span>'
         titulo_agente = "Relatório de Otimização e SEO"
+    elif tipo_relatorio == "roteiro": # <--- NOVO BLOCO
+        badge_html = '<span class="agent-badge copy-badge">✍️ ROTEIRISTA VIRAL</span>'
+        titulo_agente = "Roteiro de Vídeo Completo"
     else:
         badge_html = '<span class="agent-badge ceo-badge">🎯 DECISÃO DO CEO</span>'
         titulo_agente = "Relatório Executivo de Decisão"
+    
+    # ... O resto da função continua igual (projeto_info, html = f"...", etc)
     
     # Informações do projeto
     projeto_html = ""
@@ -631,7 +568,26 @@ def criar_agente_booster():
             "USE MARKDOWN PARA FORMATAÇÃO CLARA E PROFISSIONAL."
         ]
     )
-
+def criar_agente_copywriter():
+    ano = ano_atual()
+    return Agent(
+        model=DeepSeekChat(api_key=DEEPSEEK_API_KEY, temperature=0.7),
+        name="Copywriter_YouTube",
+        role="Roteirista Sênior de YouTube",
+        instructions=[
+            f"VOCÊ É O COPYWRITER: Sua missão é transformar a decisão do CEO em um ROTEIRO DE VÍDEO completo.",
+            "ESTRUTURA OBRIGATÓRIA DO ROTEIRO:",
+            "1. GANCHO (0-15s): Uma frase chocante ou pergunta que prenda a atenção imediatamente.",
+            "2. VINHETA/INTRO (15-30s): Apresentação rápida do canal e do tema.",
+            "3. CONTEÚDO (Corpo): Explique o tópico usando linguagem simples (nível 5ª série), mas com autoridade.",
+            "4. RETENÇÃO: Insira 'quebras de padrão' sugeridas (ex: mudar câmera, mostrar gráfico).",
+            "5. CTA (Call to Action): O momento exato de pedir o like/inscrição.",
+            f"CONTEXTO: Estamos em {ano}, o público tem atenção curta. Seja dinâmico.",
+            "FORMATO: Use Markdown. Separe as falas do narrador das instruções visuais (ex: [MOSTRAR GRÁFICO]).",
+            "RETORNE APENAS O ROTEIRO, SEM METADADOS."
+        ],
+        markdown=True
+    )
 # 6. FUNÇÕES DE LIMPEZA E FORMATAÇÃO
 def limpar_resposta_agente(resposta):
     """Remove metadados técnicos e extrai apenas o conteúdo formatado"""
@@ -717,7 +673,8 @@ class SistemaYouTubeAutomation:
         self.ceo = criar_gerente_executivo()
         self.especialistas = {
             "hunter": criar_agente_hunter(),
-            "booster": criar_agente_booster()
+            "booster": criar_agente_booster(),
+            "copywriter": criar_agente_copywriter()
         }
     
     def executar_workflow(self, nicho, db, projeto_id):
@@ -847,8 +804,24 @@ class SistemaYouTubeAutomation:
             
             ceo_response = self.ceo.run(ceo_prompt)
             resultados["ceo_verdict"] = extrair_texto_principal(ceo_response)
-        
+        # --- NOVO BLOCO: COPYWRITER (Adicione daqui para baixo) ---
+        with st.spinner("✍️ Copywriter escrevendo o roteiro viral..."):
+            copy_prompt = f"""
+            Gere um roteiro completo baseado nesta Decisão do CEO:
+            {resultados['ceo_verdict']}
+            
+            E usando estas otimizações do Booster (Títulos/Temas):
+            {resultados['booster_optimization']}
+            
+            O roteiro deve ter entre 3 a 5 minutos de leitura estimada.
+            """
+            
+            copy_response = self.especialistas["copywriter"].run(copy_prompt)
+            resultados["copywriter_script"] = extrair_texto_principal(copy_response)
+        # ----------------------------------------------------------
+
         return resultados
+        
     
     def _extrair_melhor_ideia(self, hunter_analysis):
         """Extrai a primeira/melhor ideia da análise do Hunter"""
@@ -1251,7 +1224,8 @@ def main():
             resultados = st.session_state.workflow_resultados
             
             # Criar abas para cada etapa
-            tab1, tab2, tab3 = st.tabs([f"🔍 HUNTER", f"🚀 BOOSTER", f"🎯 CEO"])
+            tab1, tab2, tab3, tab4 = st.tabs([f"🔍 HUNTER", f"🚀 BOOSTER", f"🎯 CEO", f"✍️ ROTEIRO"])
+            #tab1, tab2, tab3 = st.tabs([f"🔍 HUNTER", f"🚀 BOOSTER", f"🎯 CEO"])
             
             with tab1:
                 st.markdown(f"### 🔍 Análise do Hunter - {ano}")
@@ -1358,6 +1332,30 @@ def main():
                             )
                 else:
                     st.warning("Nenhum veredito disponível")
+            with tab4:
+                st.markdown(f"### ✍️ Roteiro de Vídeo - {ano}")
+                script_content = resultados.get("copywriter_script", "")
+                
+                if script_content:
+                    st.markdown(f"""
+                    <div class='copy-container'>
+                    {script_content}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # BOTÕES DE EXPORTAÇÃO DO ROTEIRO
+                    st.markdown("---")
+                    col_copy1, col_copy2 = st.columns(2)
+                    
+                    with col_copy1:
+                        if st.button("📄 Exportar Roteiro (PDF/HTML)", key="export_copy_html"):
+                            exportar_relatorio(script_content, "roteiro", projeto, formato="html")
+                            
+                    with col_copy2:
+                        if st.button("📝 Copiar Texto Puro", key="export_copy_txt"):
+                             exportar_relatorio(script_content, "roteiro", projeto, formato="txt")
+                else:
+                    st.warning("Roteiro ainda não gerado.")     
             
             # Plano de ação resumido
             st.divider()
