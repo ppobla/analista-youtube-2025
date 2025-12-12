@@ -1012,6 +1012,7 @@ def gerar_prompt_sugestao_nicho():
     Evite metadados técnicos na resposta."""
 
 # 9. FUNÇÃO PRINCIPAL STREAMLIT
+# 9. FUNÇÃO PRINCIPAL STREAMLIT
 def main():
     st.set_page_config(
         page_title="YouTube Automation CEO",
@@ -1118,16 +1119,51 @@ def main():
     </style>
     """, unsafe_allow_html=True)
     
-    # INICIALIZAR BANCO DE DADOS
-    # INICIALIZAR BANCO DE DADOS (Passando a conexão supabase)
+    # --- 1. CARREGAR CHAVES ---
+    keys = carregar_chaves_seguras()
+    if not keys and 'temp_keys' in st.session_state:
+        keys = st.session_state['temp_keys']
+
+    # --- 2. SE NÃO TIVER CHAVES, PEDE SETUP E PARA ---
+    if not keys:
+        tela_configuracao_inicial()
+        st.stop()
+
+    # --- 3. CONECTAR AO SUPABASE (CRIA A VARIÁVEL 'supabase') ---
+    try:
+        supabase = create_client(keys["SUPABASE_URL"], keys["SUPABASE_KEY"])
+    except Exception as e:
+        st.error(f"Erro ao conectar no banco de dados: {e}")
+        st.stop()
+
+    # --- 4. VERIFICA LOGIN ---
+    if 'user' not in st.session_state:
+        tela_login(supabase)
+        st.stop()
+
+    # --- 5. SIDEBAR COM LOGOUT ---
+    with st.sidebar:
+        st.write(f"👤 **{st.session_state['user'].email}**")
+        if st.button("Sair (Logout)"):
+            supabase.auth.sign_out()
+            del st.session_state['user']
+            st.rerun()
+        st.divider()
+
+    # --- 6. DEFINE VARIÁVEIS GLOBAIS PARA OS AGENTES ---
+    global DEEPSEEK_API_KEY, SUPABASE_URL, SUPABASE_KEY, YOUTUBE_API_KEY
+    DEEPSEEK_API_KEY = keys["DEEPSEEK_API_KEY"]
+    SUPABASE_URL = keys["SUPABASE_URL"]
+    SUPABASE_KEY = keys["SUPABASE_KEY"]
+    YOUTUBE_API_KEY = keys["YOUTUBE_API_KEY"]
+    
+    # --- 7. INICIALIZAR BANCO DE DADOS (Agora funciona pois 'supabase' existe) ---
     if "db" not in st.session_state:
-        # Aqui passamos a variável 'supabase' que criamos no login
         st.session_state.db = YouTubeAutomationDatabase(supabase)
     
-    # INICIALIZAR SISTEMA
+    # --- 8. INICIALIZAR SISTEMA DE IA ---
     if "sistema" not in st.session_state:
         st.session_state.sistema = SistemaYouTubeAutomation()
-    
     # HEADER
     ano = ano_atual()
     col1, col2, col3 = st.columns([1, 2, 1])
