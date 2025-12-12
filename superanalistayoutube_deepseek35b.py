@@ -115,31 +115,30 @@ def tela_configuracao_inicial():
 def main():
     st.set_page_config(page_title="YouTube Automation CEO", page_icon="🎬", layout="wide")
 
-    # A. Carrega chaves (Do arquivo ou da sessão temporária)
+    # 1. CARREGA AS CHAVES
     keys = carregar_chaves_seguras()
     if not keys and 'temp_keys' in st.session_state:
         keys = st.session_state['temp_keys']
 
-    # B. Se não tem chaves, mostra tela de Configuração e PARA
+    # 2. SE NÃO TIVER CHAVES, PARA TUDO E PEDE SETUP
     if not keys:
         tela_configuracao_inicial()
         st.stop()
 
-    # C. Inicializa Supabase (Necessário para o login)
+    # 3. CONECTA NO SUPABASE (CRIA A VARIÁVEL 'supabase')
+    # --- IMPORTANTE: Esta parte tem que vir ANTES de usar o banco ---
     try:
         supabase = create_client(keys["SUPABASE_URL"], keys["SUPABASE_KEY"])
     except Exception as e:
         st.error(f"Erro ao conectar no banco de dados: {e}")
         st.stop()
 
-    # D. Verifica Login
+    # 4. VERIFICA LOGIN (Usa a variável 'supabase' criada acima)
     if 'user' not in st.session_state:
         tela_login(supabase)
-        st.stop() # PARA TUDO se não estiver logado
+        st.stop()
 
-    # --- SE CHEGOU AQUI, O USUÁRIO ESTÁ LOGADO E AS CHAVES ESTÃO OK ---
-    
-    # Sidebar com Logout
+    # 5. SIDEBAR E LOGOUT
     with st.sidebar:
         st.write(f"👤 **{st.session_state['user'].email}**")
         if st.button("Sair (Logout)"):
@@ -148,12 +147,23 @@ def main():
             st.rerun()
         st.divider()
 
-    # Define as variáveis globais para o resto do script usar
+    # 6. DEFINE GLOBAIS
     global DEEPSEEK_API_KEY, SUPABASE_URL, SUPABASE_KEY, YOUTUBE_API_KEY
     DEEPSEEK_API_KEY = keys["DEEPSEEK_API_KEY"]
     SUPABASE_URL = keys["SUPABASE_URL"]
     SUPABASE_KEY = keys["SUPABASE_KEY"]
     YOUTUBE_API_KEY = keys["YOUTUBE_API_KEY"]
+
+    # 7. AGORA SIM: INICIALIZA O BANCO (Passando 'supabase')
+    # --- Como o 'supabase' já foi criado no passo 3, aqui não dará erro ---
+    if "db" not in st.session_state:
+        st.session_state.db = YouTubeAutomationDatabase(supabase)
+
+    # 8. INICIALIZA O SISTEMA DE IA
+    if "sistema" not in st.session_state:
+        st.session_state.sistema = SistemaYouTubeAutomation()
+
+    # ... O RESTO DO SEU CÓDIGO (Interface, Header, etc.) CONTINUA ABAIXO ...
 
 # ... O RESTO DO CÓDIGO CONTINUA IGUAL ...
 
