@@ -165,6 +165,10 @@ def ano_atual():
 class YouTubeAutomationDatabase:
     """Banco de dados na Nuvem (Supabase)"""
     
+    def __init__(self, supabase_client):
+        # Recebe o cliente conectado e guarda dentro da classe
+        self.supabase = supabase_client
+
     def criar_projeto(self, nicho, descricao="Novo Projeto"):
         codigo = f"YT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         data = {
@@ -173,9 +177,8 @@ class YouTubeAutomationDatabase:
             "descricao": descricao,
             "data_inicio": datetime.now().isoformat()
         }
-        # Inserção no Supabase
-        response = supabase.table("projetos").insert(data).execute()
-        # O supabase retorna uma lista de dados inseridos, pegamos o primeiro
+        # Agora usa self.supabase (o cliente interno)
+        response = self.supabase.table("projetos").insert(data).execute()
         if response.data:
             return response.data[0]
         return None
@@ -190,7 +193,7 @@ class YouTubeAutomationDatabase:
             "potencial_lucratividade": dados_analise.get('potencial_lucratividade', 'MODERADO'),
             "elementos_80_20": dados_analise.get('elementos_80_20', [])
         }
-        return supabase.table("analises_nicho").insert(data).execute()
+        return self.supabase.table("analises_nicho").insert(data).execute()
     
     def registrar_otimizacao(self, projeto_id, dados_otimizacao):
         data = {
@@ -202,20 +205,20 @@ class YouTubeAutomationDatabase:
             "ferramentas_automacao": dados_otimizacao.get('ferramentas_automacao', []),
             "plano_globalizacao": dados_otimizacao.get('plano_globalizacao', '')
         }
-        return supabase.table("otimizacoes").insert(data).execute()
+        return self.supabase.table("otimizacoes").insert(data).execute()
     
     def listar_projetos(self):
         # Busca projetos ordenados por data
-        response = supabase.table("projetos").select("*").order("data_inicio", desc=True).execute()
+        response = self.supabase.table("projetos").select("*").order("data_inicio", desc=True).execute()
         if response.data:
             return pd.DataFrame(response.data)
         return pd.DataFrame()
         
     def obter_historico_projeto(self, projeto_id):
         # Busca dados relacionados
-        proj = supabase.table("projetos").select("*").eq("id", projeto_id).execute()
-        analises = supabase.table("analises_nicho").select("*").eq("projeto_id", projeto_id).execute()
-        otimizacoes = supabase.table("otimizacoes").select("*").eq("projeto_id", projeto_id).execute()
+        proj = self.supabase.table("projetos").select("*").eq("id", projeto_id).execute()
+        analises = self.supabase.table("analises_nicho").select("*").eq("projeto_id", projeto_id).execute()
+        otimizacoes = self.supabase.table("otimizacoes").select("*").eq("projeto_id", projeto_id).execute()
         
         return {
             "projeto": proj.data[0] if proj.data else {},
@@ -1106,8 +1109,10 @@ def main():
     """, unsafe_allow_html=True)
     
     # INICIALIZAR BANCO DE DADOS
+    # INICIALIZAR BANCO DE DADOS (Passando a conexão supabase)
     if "db" not in st.session_state:
-        st.session_state.db = YouTubeAutomationDatabase()
+        # Aqui passamos a variável 'supabase' que criamos no login
+        st.session_state.db = YouTubeAutomationDatabase(supabase)
     
     # INICIALIZAR SISTEMA
     if "sistema" not in st.session_state:
