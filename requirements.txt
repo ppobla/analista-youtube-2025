@@ -1,9 +1,10 @@
 streamlit
-phidata
-pandas
-python-dotenv
 supabase
+gotrue
+phidata
+python-dotenv
 google-api-python-client
-duckduckgo-search
-openai
-packaging
+pandas
+toml
+pyyaml
+streamlit-authenticator
