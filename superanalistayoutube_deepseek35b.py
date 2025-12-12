@@ -702,34 +702,53 @@ def criar_agente_booster():
     )
 
 # --- AQUI É O LUGAR CORRETO DA FUNÇÃO DE IMAGEM ---
+import requests # <--- Certifique-se que isso está importado (geralmente já vem no python)
+
 def gerar_thumbnail_google(prompt_texto, api_key):
     """
-    Gera imagem usando o Google Imagen 3 (via Gemini API)
+    Gera imagem usando a API REST direta do Google (Bypassa problemas de biblioteca)
     """
     try:
-        genai.configure(api_key=api_key)
+        # URL oficial da API do Imagen 3
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key={api_key}"
         
-        # O modelo de imagem do Google se chama 'imagen-3.0-generate-001'
-        try:
-            modelo_imagem = genai.ImageGenerationModel("imagen-3.0-generate-001")
-            response = modelo_imagem.generate_images(
-                prompt=prompt_texto,
-                number_of_images=1,
-                aspect_ratio="16:9", # Perfeito para YouTube
-                safety_filter_level="block_only_high",
-            )
-        except:
-            # Fallback se o modelo 3.0 falhar
-            modelo_imagem = genai.ImageGenerationModel("imagen-2")
-            response = modelo_imagem.generate_images(
-                prompt=prompt_texto,
-                number_of_images=1
-            )
+        headers = {
+            "Content-Type": "application/json"
+        }
         
-        # Retorna a imagem propriamente dita
-        return response.images[0]
+        payload = {
+            "instances": [
+                {
+                    "prompt": prompt_texto
+                }
+            ],
+            "parameters": {
+                "sampleCount": 1,
+                "aspectRatio": "16:9"
+            }
+        }
+        
+        # Faz a chamada direta (sem usar a biblioteca google-generativeai)
+        response = requests.post(url, headers=headers, json=payload)
+        
+        if response.status_code != 200:
+            return f"Erro na API ({response.status_code}): {response.text}"
+            
+        result = response.json()
+        
+        # A API retorna a imagem em Base64 string
+        if "predictions" in result:
+            b64_image = result["predictions"][0]["bytesBase64Encoded"]
+            
+            # Converte de volta para imagem
+            image_data = base64.b64decode(b64_image)
+            image = Image.open(io.BytesIO(image_data))
+            return image
+            
+        return f"Resposta inesperada da API: {result}"
+        
     except Exception as e:
-        return f"Erro ao gerar imagem no Google: {str(e)}"
+        return f"Erro técnico ao gerar imagem: {str(e)}"
 
 def criar_agente_copywriter():
     ano = ano_atual()
