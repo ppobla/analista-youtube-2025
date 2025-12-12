@@ -1481,7 +1481,7 @@ def main():
 
                     # --- NOVO: GERADOR DE THUMBNAIL GOOGLE ---
                     st.markdown("---")
-                    st.subheader("🎨 Estúdio de Criação (Google Imagen)")
+                    st.subheader("🎨 Estúdio de Thumbnails (Flux AI)")
                     
                     # Tenta extrair o prompt automaticamente do texto do Booster
                     prompt_sugerido = ""
@@ -1499,7 +1499,7 @@ def main():
                     prompt_final = st.text_area("Prompt da Thumbnail:", value=prompt_completo, height=100)
                     
                     # O Botão Mágico
-                    if st.button("✨ Gerar Thumbnail com IA do Google", type="primary"):
+                    if st.button("✨ Gerar Thumbnail com IA", type="primary"):
                         # Precisamos de uma chave API do Google (AI Studio)
                         # Tenta usar a mesma do YouTube ou pede uma específica
                         api_key_google = st.session_state.get('temp_keys', {}).get('DEEPSEEK_API_KEY') 
@@ -1613,37 +1613,59 @@ def main():
                     st.warning("Roteiro ainda não gerado.")     
             
             # Plano de ação resumido
+            # ---------------------------------------------------------
+            # PLANO DE AÇÃO DINÂMICO (CORREÇÃO)
+            # ---------------------------------------------------------
             st.divider()
-            st.markdown("## 📋 Plano de Ação Resumido")
+            st.markdown("## 📋 Plano de Ação do CEO (Dinâmico)")
             
+            # Tenta extrair dados reais do texto do CEO
+            acao_hoje = "Verificar relatório detalhado acima."
+            investimento = "Variável"
+            plano_semana = "Configuração e Produção"
+            
+            if resultados.get("ceo_verdict"):
+                texto_ceo = resultados.get("ceo_verdict")
+                
+                # Lógica simples para encontrar os trechos no texto do CEO
+                try:
+                    # Procura o bloco de Ação Imediata
+                    if "Ação concreta para hoje" in texto_ceo:
+                        inicio = texto_ceo.find("Ação concreta para hoje")
+                        fim = texto_ceo.find("Investimento inicial", inicio)
+                        if fim == -1: fim = len(texto_ceo)
+                        acao_hoje = texto_ceo[inicio:fim].replace("Ação concreta para hoje", "").replace(":", "").strip()
+                    
+                    # Procura o bloco de Investimento
+                    if "Investimento inicial" in texto_ceo:
+                        inicio = texto_ceo.find("Investimento inicial")
+                        fim = texto_ceo.find("Primeira semana", inicio)
+                        if fim == -1: fim = len(texto_ceo)
+                        investimento = texto_ceo[inicio:fim].replace("Investimento inicial", "").replace(":", "").strip()
+                        
+                    # Procura o bloco de Primeira Semana
+                    if "Primeira semana" in texto_ceo:
+                        inicio = texto_ceo.find("Primeira semana")
+                        # Tenta achar o fim da seção (pode ser o próximo título ## ou fim do texto)
+                        match_fim = re.search(r"\n## ", texto_ceo[inicio:])
+                        fim = (match_fim.start() + inicio) if match_fim else len(texto_ceo)
+                        plano_semana = texto_ceo[inicio:fim].replace("Primeira semana", "").replace(":", "").strip()
+                        
+                except Exception:
+                    pass # Se falhar a extração, mantém o texto padrão
+            
+            # Exibe os cards dinâmicos
             col_passo1, col_passo2, col_passo3 = st.columns(3)
             
             with col_passo1:
-                st.markdown("""
-                ### 🗓️ Semana 1
-                • Definir nome do canal
-                • Criar artes (logo, banner)
-                • Configurar ferramentas
-                • Produzir primeiro vídeo
-                """)
+                st.info(f"**🔥 Ação Imediata**\n\n{acao_hoje[:300]}") # Limita caracteres para não quebrar layout
             
             with col_passo2:
-                st.markdown("""
-                ### 🎬 Semana 2-3
-                • Produzir 3 vídeos piloto
-                • Testar diferentes ganchos
-                • Otimizar baseado em dados
-                • Iniciar SEO básico
-                """)
+                st.warning(f"**💰 Investimento Estimado**\n\n{investimento[:300]}")
             
             with col_passo3:
-                st.markdown("""
-                ### 📈 Semana 4+
-                • Escalar produção
-                • Expandir para subnichos
-                • Testar monetização
-                • Analisar métricas
-                """)
+                st.success(f"**🗓️ Primeira Semana**\n\n{plano_semana[:400]}")
+            # ---------------------------------------------------------
             
             # Exportação completa do projeto
             st.markdown("---")
