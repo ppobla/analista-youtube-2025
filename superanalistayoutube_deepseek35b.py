@@ -1,8 +1,16 @@
-import streamlit as st
-from supabase import create_client, Client
-from gotrue.errors import AuthApiError
 import os
 import toml
+import json
+import re
+import base64
+from datetime import datetime # <--- O erro atual era a falta desta linha
+import pandas as pd
+from googleapiclient.discovery import build
+
+# Importações da IA (Agno/Phi) que também sumiram
+from phi.agent import Agent
+from phi.model.deepseek import DeepSeekChat
+from phi.tools.duckduckgo import DuckDuckGo
 
 # --- 1. FUNÇÃO PARA CARREGAR CHAVES (HÍBRIDA) ---
 def carregar_chaves_seguras():
