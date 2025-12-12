@@ -14,6 +14,13 @@ from googleapiclient.discovery import build
 from phi.agent import Agent
 from phi.model.deepseek import DeepSeekChat
 from phi.tools.duckduckgo import DuckDuckGo
+# --- INICIALIZAÇÃO DE VARIÁVEIS GLOBAIS (Evita o NameError) ---
+DEEPSEEK_API_KEY = None
+SUPABASE_URL = None
+SUPABASE_KEY = None
+YOUTUBE_API_KEY = None
+
+
 
 # --- 1. FUNÇÃO PARA CARREGAR CHAVES (HÍBRIDA) ---
 def carregar_chaves_seguras():
