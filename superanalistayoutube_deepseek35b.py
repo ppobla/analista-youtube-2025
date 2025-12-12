@@ -1613,58 +1613,89 @@ def main():
                     st.warning("Roteiro ainda não gerado.")     
             
             # Plano de ação resumido
-            # ---------------------------------------------------------
-            # PLANO DE AÇÃO DINÂMICO (CORREÇÃO)
+            # PLANO DE AÇÃO DINÂMICO (VERSÃO ROBUSTA LINHA POR LINHA)
             # ---------------------------------------------------------
             st.divider()
-            st.markdown("## 📋 Plano de Ação do CEO (Dinâmico)")
+            st.markdown("## 📋 Plano de Ação do CEO (Resumo)")
             
-            # Tenta extrair dados reais do texto do CEO
-            acao_hoje = "Verificar relatório detalhado acima."
-            investimento = "Variável"
-            plano_semana = "Configuração e Produção"
+            # Valores padrão caso não encontre
+            acao_hoje = "Ver detalhes no relatório acima."
+            investimento = "Variável (ver relatório)."
+            plano_semana = "Seguir cronograma acima."
             
             if resultados.get("ceo_verdict"):
                 texto_ceo = resultados.get("ceo_verdict")
                 
-                # Lógica simples para encontrar os trechos no texto do CEO
-                try:
-                    # Procura o bloco de Ação Imediata
-                    if "Ação concreta para hoje" in texto_ceo:
-                        inicio = texto_ceo.find("Ação concreta para hoje")
-                        fim = texto_ceo.find("Investimento inicial", inicio)
-                        if fim == -1: fim = len(texto_ceo)
-                        acao_hoje = texto_ceo[inicio:fim].replace("Ação concreta para hoje", "").replace(":", "").strip()
+                # Divide o texto em linhas para analisar uma por uma
+                linhas = texto_ceo.split('\n')
+                
+                # Variáveis de controle
+                capturando_acao = False
+                capturando_investimento = False
+                capturando_semana = False
+                
+                buffer_acao = []
+                buffer_investimento = []
+                buffer_semana = []
+                
+                for linha in linhas:
+                    linha_limpa = linha.strip().lower()
                     
-                    # Procura o bloco de Investimento
-                    if "Investimento inicial" in texto_ceo:
-                        inicio = texto_ceo.find("Investimento inicial")
-                        fim = texto_ceo.find("Primeira semana", inicio)
-                        if fim == -1: fim = len(texto_ceo)
-                        investimento = texto_ceo[inicio:fim].replace("Investimento inicial", "").replace(":", "").strip()
+                    # Detecta onde começam as seções
+                    if "ação concreta" in linha_limpa or "ação para hoje" in linha_limpa:
+                        capturando_acao = True
+                        capturando_investimento = False
+                        capturando_semana = False
+                        # Se tiver conteúdo na mesma linha (ex: "Ação: Fazer isso"), já pega
+                        if ":" in linha:
+                            buffer_acao.append(linha.split(":", 1)[1].strip())
+                        continue
                         
-                    # Procura o bloco de Primeira Semana
-                    if "Primeira semana" in texto_ceo:
-                        inicio = texto_ceo.find("Primeira semana")
-                        # Tenta achar o fim da seção (pode ser o próximo título ## ou fim do texto)
-                        match_fim = re.search(r"\n## ", texto_ceo[inicio:])
-                        fim = (match_fim.start() + inicio) if match_fim else len(texto_ceo)
-                        plano_semana = texto_ceo[inicio:fim].replace("Primeira semana", "").replace(":", "").strip()
+                    if "investimento inicial" in linha_limpa or "custo estimado" in linha_limpa:
+                        capturando_acao = False
+                        capturando_investimento = True
+                        capturando_semana = False
+                        if ":" in linha:
+                            buffer_investimento.append(linha.split(":", 1)[1].strip())
+                        continue
                         
-                except Exception:
-                    pass # Se falhar a extração, mantém o texto padrão
+                    if "primeira semana" in linha_limpa or "semana 1" in linha_limpa:
+                        capturando_acao = False
+                        capturando_investimento = False
+                        capturando_semana = True
+                        continue
+                    
+                    # Se encontrar um novo título grande (##), para tudo
+                    if linha.strip().startswith("##"):
+                        capturando_acao = False
+                        capturando_investimento = False
+                        capturando_semana = False
+                        continue
+                    
+                    # Captura o conteúdo das linhas seguintes
+                    if capturando_acao and linha.strip():
+                        buffer_acao.append(linha.strip().replace("*", "").replace("-", "").strip())
+                    elif capturando_investimento and linha.strip():
+                        buffer_investimento.append(linha.strip().replace("*", "").replace("-", "").strip())
+                    elif capturando_semana and linha.strip():
+                        buffer_semana.append(linha.strip().replace("*", "").replace("-", "").strip())
+
+                # Monta os textos finais (junta as linhas capturadas)
+                if buffer_acao: acao_hoje = "\n".join(buffer_acao[:3]) # Pega até 3 linhas
+                if buffer_investimento: investimento = "\n".join(buffer_investimento)
+                if buffer_semana: plano_semana = "\n".join(buffer_semana[:5]) # Pega até 5 linhas
             
             # Exibe os cards dinâmicos
             col_passo1, col_passo2, col_passo3 = st.columns(3)
             
             with col_passo1:
-                st.info(f"**🔥 Ação Imediata**\n\n{acao_hoje[:300]}") # Limita caracteres para não quebrar layout
+                st.info(f"**🔥 Ação Imediata**\n\n{acao_hoje}")
             
             with col_passo2:
-                st.warning(f"**💰 Investimento Estimado**\n\n{investimento[:300]}")
+                st.warning(f"**💰 Investimento**\n\n{investimento}")
             
             with col_passo3:
-                st.success(f"**🗓️ Primeira Semana**\n\n{plano_semana[:400]}")
+                st.success(f"**🗓️ Primeira Semana**\n\n{plano_semana}")
             # ---------------------------------------------------------
             
             # Exportação completa do projeto
