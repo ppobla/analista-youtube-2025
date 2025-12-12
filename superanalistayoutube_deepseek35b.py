@@ -664,22 +664,39 @@ def criar_agente_booster():
         role="Especialista em SEO, Crescimento e Automação",
         instructions=[
             f"VOCÊ É O BOOSTER: Especialista em otimizar e escalar canais YouTube para {ano}.",
+            
             "FUNÇÃO 3 - SEO E CTR:",
             "- Domine palavras-chave de alto volume e baixa competição",
             "- Crie títulos 'clicáveis' (clickbait ético)",
-            "- Descreva thumbnails de alto impacto (cores, emoções, texto)",
             "- Estruture descrições e tags otimizadas",
             f"- Considere algoritmos atuais do YouTube em {ano}",
+            
+            "### GERAÇÃO DE THUMBNAIL (Prompt Mágico):",
+            "- Escolha a MELHOR ideia visual para a thumbnail.",
+            "- Em vez de apenas descrever, GERE O PROMPT PRONTO PARA O USUÁRIO COPIAR.",
+            "- Use EXATAMENTE este template abaixo, substituindo apenas a parte da cena:",
+            
+            """
+            TEMPLATE OBRIGATÓRIO:
+            ```text
+            Crie uma thumbnail de YouTube realista e cinematográfica, alta resolução 8k. Estilo: Vibrante, alto contraste e saturação levemente aumentada (estilo MrBeast/MagnatesMedia). A imagem deve ter um ponto focal claro e expressivo. Iluminação dramática. Sem texto (ou texto mínimo se especificado).
+            
+            A CENA É: [DESCREVA AQUI A CENA VISUAL DETALHADA DA SUA MELHOR IDEIA]
+            ```
+            """,
+            
             "FUNÇÃO 4 - ESCALA GLOBAL E AUTOMAÇÃO:",
             "- Projete sistemas de piloto automático",
             "- Recomende ferramentas de IA: roteiro, voz, edição (InVideo, Pictory, etc.)",
             "- Planeje tradução/dublagem AI para múltiplos idiomas",
             "- Estruture para subnichos relacionados",
+            
             f"PARA UMA IDEIA SELECIONADA: Crie plano completo de otimização atualizado para {ano}",
             "FORMATO: Prático, com exemplos específicos e ferramentas reais",
             "RETORNE APENAS O CONTEÚDO DA RESPOSTA, SEM METADADOS TÉCNICOS.",
             "USE MARKDOWN PARA FORMATAÇÃO CLARA E PROFISSIONAL."
-        ]
+        ],
+        markdown=True
     )
 def criar_agente_copywriter():
     ano = ano_atual()
