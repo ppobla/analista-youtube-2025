@@ -693,31 +693,37 @@ def criar_agente_hunter():
 def criar_agente_booster():
     ano = ano_atual()
     return Agent(
-        model=DeepSeekChat(api_key=DEEPSEEK_API_KEY, temperature=0.6),
+        model=DeepSeekChat(api_key=DEEPSEEK_API_KEY, temperature=0.7), # Temperatura um pouco maior para criatividade visual
         name="Booster_YouTube",
-        role="Especialista em SEO, Crescimento e Automação",
+        role="Especialista Visuais e Estratégia de CTR",
         instructions=[
-            f"VOCÊ É O BOOSTER: Especialista em otimizar e escalar canais YouTube para {ano}.",
+            f"VOCÊ É O BOOSTER: Sua missão é maximizar o Clique (CTR) e a Retenção para {ano}.",
             
-            "FUNÇÃO 1 - SEO E CTR:",
-            "- Domine palavras-chave de alto volume e baixa competição",
-            "- Crie títulos 'clicáveis' (clickbait ético)",
+            "FUNÇÃO 1 - SEO E TÍTULOS MAGNÉTICOS:",
+            "- Crie títulos impossíveis de ignorar (Clickbait Ético) baseados na psicologia do nicho.",
+            "- Use estruturas como: Listas, 'Como eu...', Negatividade/Erro, Revelação.",
             
-            "FUNÇÃO 2 - GERAÇÃO DE THUMBNAIL (Prompt Mágico):",
-            "- Escolha a MELHOR ideia visual.",
-            "- GERE O PROMPT PRONTO usando EXATAMENTE este template:",
+            "FUNÇÃO 2 - GERAÇÃO DE THUMBNAIL (DIVERSIFICAÇÃO VISUAL CRUCIAL):",
+            "ATENÇÃO: NÃO USE SEMPRE O MESMO ESTILO. ADAPTE A ESTÉTICA AO NICHO.",
+            "- Primeiro, analise o nicho e ESCOLHA UM dos estilos visuais abaixo:",
+            "  [ESTILO A - DRAMÁTICO/FINANCEIRO]: Fundo escuro, luz de recorte (rim light) dourada ou azul, rosto sério/preocupado, gráficos de dinheiro. Foco no contraste.",
+            "  [ESTILO B - CLEAN/TECH/EDUCACIONAL]: Fundo claro e limpo (estúdio), iluminação suave (softbox), produto ou rosto em foco nítido, minimalista. Ar de autoridade.",
+            "  [ESTILO C - VIBRANTE/ENTRETENIMENTO]: Cores saturadas neon, expressões faciais exageradas (choque/riso), múltiplos elementos, estilo 'MrBeast'.",
+            "  [ESTILO D - DOCUMENTAL/MISTÉRIO]: Aspecto cinematográfico, cores dessaturadas ou sépia, granulado, silhuetas, ar de suspense.",
+            
+            "- GERE O PROMPT FINAL usando ESTE NOVO TEMPLATE DINÂMICO (Substitua o estilo):",
             """
-            TEMPLATE OBRIGATÓRIO:
+            NOVO TEMPLATE OBRIGATÓRIO:
             ```text
-            Crie uma thumbnail de YouTube realista e cinematográfica, alta resolução 8k. Estilo: Vibrante, alto contraste e saturação levemente aumentada (estilo MrBeast/MagnatesMedia). A imagem deve ter um ponto focal claro e expressivo. Iluminação dramática. Sem texto (ou texto mínimo se especificado).
+            YouTube thumbnail, 8k resolution, altamente detalhado. ESTILO VISUAL: [ESCREVA AQUI O NOME DO ESTILO ESCOLHIDO ACIMA E SUAS CARACTERÍSTICAS VISUAIS].
             
-            A CENA É: [DESCREVA AQUI A CENA VISUAL DETALHADA]
+            A CENA É: [DESCREVA AQUI A CENA VISUAL DETALHADA DA SUA MELHOR IDEIA, FOCANDO EM UMA COMPOSIÇÃO ÚNICA]
             ```
             """,
             
             "FUNÇÃO 3 - STACK DE FERRAMENTAS E PESQUISA (CRUCIAL):",
             f"- Liste as MELHORES ferramentas de IA de {ano} para cada etapa:",
-            "  * Pesquisa de Ideias: (Cite ferramentas como Google Trends, AnswerThePublic, Perplexity, etc)",
+            "  * Pesquisa de Ideias: (Cite ferramentas específicas: Google Trends, AnswerThePublic, Perplexity, etc)",
             "  * Roteiro e Voz: (Cite ferramentas específicas)",
             "  * Edição e Visual: (Cite ferramentas de automação)",
             
@@ -726,7 +732,7 @@ def criar_agente_booster():
             "- Estruture 'Sistema de Geração de Ideias' para nunca faltar conteúdo",
             
             f"PARA UMA IDEIA SELECIONADA: Crie plano completo de otimização para {ano}",
-            "FORMATO: Prático, detalhado e focado em ferramentas reais.",
+            "FORMATO: Prático, detalhado e visualmente rico.",
             "RETORNE APENAS O CONTEÚDO DA RESPOSTA, SEM METADADOS TÉCNICOS.",
             "USE MARKDOWN PARA FORMATAÇÃO CLARA."
         ],
