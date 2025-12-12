@@ -568,7 +568,8 @@ Sistema YouTube Automation CEO
         st.error(f"Erro ao exportar relatório: {e}")
         return None
     
-# 4. GERENTE EXECUTIVO (CEO)
+
+# 4. GERENTE EXECUTIVO (CEO) - VERSÃO DETALHISTA
 @st.cache_resource
 def criar_gerente_executivo():
     ano = ano_atual()
@@ -579,20 +580,34 @@ def criar_gerente_executivo():
         description=f"CEO especializado em construir canais dark lucrativos e escaláveis para {ano}",
         instructions=[
             f"VOCÊ É O CEO: Tome decisões estratégicas finais baseadas nas análises dos especialistas para {ano}.",
-            "VISÃO MACRO: Avalie ROI, escalabilidade e riscos de cada oportunidade.",
-            "APROVAÇÃO DE NICHOS: Selecione a melhor ideia de canal baseada em dados.",
-            "SÍNTESE: Integre as descobertas do Hunter e do Booster em um plano de ação coeso.",
-            "DECISÃO FINAL: Defina o 'Próximo Passo Imediato' para começar a faturar.",
-            "FOCO EM LUCRO: Priorize oportunidades com alto RPM, baixa concorrência e escalabilidade.",
-            f"ATUALIZAÇÃO: Considere tendências atuais do YouTube em {ano}.",
-            "FORMATO: Use Português claro, estruturado com bullet points e métricas.",
-            "RETORNE APENAS O CONTEÚDO DA RESPOSTA, SEM METADADOS TÉCNICOS."
+            "VISÃO MACRO: Avalie ROI, escalabilidade e riscos.",
+            "SÍNTESE OBRIGATÓRIA: Você DEVE incorporar as ferramentas sugeridas pelo BOOSTER no seu plano final.",
+            
+            "ESTRUTURA DE RESPOSTA OBRIGATÓRIA:",
+            "## 📊 RESUMO EXECUTIVO",
+            "- Oportunidade: [Nome]",
+            "- Diferencial: [Por que vai dar certo]",
+            
+            "## 🚀 PRÓXIMO PASSO IMEDIATO",
+            "Não diga apenas 'Configurar canal'. Diga: 'Usar [Ferramenta X] para criar [Y]'.",
+            "Liste 3 ações concretas citando SOFTWARES ESPECÍFICOS (Ex: Canva, ElevenLabs, InVideo).",
+            
+            "## 💰 INVESTIMENTO INICIAL",
+            "Detalhe os custos reais. Ex: '$20/mês (ChatGPT Plus) + $0 (CapCut)'.",
+            
+            "## 🗓️ PRIMEIRA SEMANA",
+            "Cronograma dia-a-dia agressivo para monetizar rápido.",
+            
+            "## ✅ DECISÃO FINAL",
+            "Aprovação e Justificativa.",
+            
+            "FORMATO: Seja direto, mas RICO EM DETALHES TÉCNICOS. Evite generalismos.",
+            "RETORNE APENAS O CONTEÚDO, SEM METADADOS."
         ],
         tools=[DuckDuckGo()],
         show_tool_calls=False,
         markdown=True
     )
-
 # 5. AGENTES ESPECIALISTAS
 def ferramenta_youtube_search(query: str):
     """
@@ -1627,58 +1642,59 @@ def main():
             
             # Plano de ação resumido
            # ---------------------------------------------------------
-            # PLANO DE AÇÃO DINÂMICO (VERSÃO BLINDADA COM REGEX)
+            # PLANO DE AÇÃO DINÂMICO (VERSÃO CORRIGIDA "IMEDIATO")
             # ---------------------------------------------------------
             st.divider()
-            st.markdown("## 📋 Plano de Ação do CEO (Resumo)")
+            st.markdown("## 📋 Plano de Ação do CEO (Detalhado)")
             
-            # 1. LIMPEZA PROFUNDA DO TEXTO
+            # 1. LIMPEZA PROFUNDA
             raw_text = str(resultados.get("ceo_verdict", ""))
-            
-            # Remove metadados técnicos comuns do Phidata/Agno
             texto_limpo = re.sub(r"Message\(.*?\)", "", raw_text, flags=re.DOTALL)
             texto_limpo = re.sub(r"content='(.*?)'", r"\1", texto_limpo, flags=re.DOTALL)
-            texto_limpo = re.sub(r"metrics=\{.*?\}", "", texto_limpo, flags=re.DOTALL)
             texto_limpo = texto_limpo.replace("\\n", "\n").replace("content_type='str'", "")
             
-            # 2. EXTRAÇÃO INTELIGENTE (Busca o que está ENTRE os títulos)
-            acao_hoje = "Ver detalhes no relatório acima."
-            investimento = "Variável."
-            plano_semana = "Seguir cronograma."
+            # 2. EXTRAÇÃO INTELIGENTE
+            acao_hoje = "Ver detalhes no relatório completo acima."
+            investimento = "Ver relatório."
+            plano_semana = "Ver cronograma."
             
             try:
-                # Busca texto entre "Ação...Hoje" e "Investimento"
-                match_acao = re.search(r"(?:Ação concreta para hoje|Ação Imediata|Próximo Passo)[:\s\*\-]*(.*?)(?:Investimento|Custos|##)", texto_limpo, re.IGNORECASE | re.DOTALL)
+                # Regex mais agressivo para pular a palavra "IMEDIATO" se ela estiver solta
+                # Procura por: Titulo -> (Ignora quebras e palavras soltas) -> O CONTEÚDO REAL
+                
+                # AÇÃO
+                match_acao = re.search(r"(?:Próximo Passo Imediato|Ação Concreta para Hoje)[:\s\*\-]*(?:IMEDIATO)?[:\s\*\-]*(.*?)(?:##|Investimento)", texto_limpo, re.IGNORECASE | re.DOTALL)
                 if match_acao:
-                    acao_hoje = match_acao.group(1).strip()
+                    texto_capturado = match_acao.group(1).strip()
+                    # Se capturou muito pouco (só uma palavra), tenta pegar mais linhas
+                    if len(texto_capturado) > 5:
+                        acao_hoje = texto_capturado
 
-                # Busca texto entre "Investimento" e "Primeira Semana"
-                match_invest = re.search(r"(?:Investimento inicial|Investimento)[:\s\*\-]*(.*?)(?:Primeira semana|Semana 1|##)", texto_limpo, re.IGNORECASE | re.DOTALL)
+                # INVESTIMENTO
+                match_invest = re.search(r"(?:Investimento Inicial|Custos)[:\s\*\-]*(.*?)(?:##|Primeira Semana)", texto_limpo, re.IGNORECASE | re.DOTALL)
                 if match_invest:
                     investimento = match_invest.group(1).strip()
 
-                # Busca texto entre "Primeira Semana" e o próximo título grande "##"
-                match_semana = re.search(r"(?:Primeira semana|Semana 1)[:\s\*\-]*(.*?)(?:##|✅)", texto_limpo, re.IGNORECASE | re.DOTALL)
+                # SEMANA
+                match_semana = re.search(r"(?:Primeira Semana|Cronograma)[:\s\*\-]*(.*?)(?:##|Decisão Final|✅)", texto_limpo, re.IGNORECASE | re.DOTALL)
                 if match_semana:
                     plano_semana = match_semana.group(1).strip()
                     
             except Exception as e:
                 print(f"Erro no Regex: {e}")
 
-            # 3. EXIBIÇÃO DOS CARDS
+            # 3. EXIBIÇÃO
             col_passo1, col_passo2, col_passo3 = st.columns(3)
             
             with col_passo1:
-                # Limita o tamanho para não quebrar o layout se vier texto demais
-                st.info(f"**🔥 Ação Imediata**\n\n{acao_hoje[:250]}")
+                st.info(f"**🔥 Ferramentas & Ação**\n\n{acao_hoje[:400]}")
             
             with col_passo2:
-                st.warning(f"**💰 Investimento**\n\n{investimento[:200]}")
+                st.warning(f"**💰 Budget Real**\n\n{investimento[:300]}")
             
             with col_passo3:
-                st.success(f"**🗓️ Primeira Semana**\n\n{plano_semana[:300]}")
+                st.success(f"**🗓️ Cronograma Tático**\n\n{plano_semana[:400]}")
             # ---------------------------------------------------------
-            
             # Exportação completa do projeto
             st.markdown("---")
             st.markdown("### 💾 Exportação Completa do Projeto")
