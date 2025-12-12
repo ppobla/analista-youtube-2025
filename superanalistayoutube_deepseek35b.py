@@ -1,6 +1,10 @@
 import streamlit as st
 from supabase import create_client, Client
 from gotrue.errors import AuthApiError
+import requests
+from PIL import Image
+import io
+import urllib.parse
 import os
 import toml
 import json
@@ -704,49 +708,30 @@ def criar_agente_booster():
 # --- AQUI É O LUGAR CORRETO DA FUNÇÃO DE IMAGEM ---
 import requests # <--- Certifique-se que isso está importado (geralmente já vem no python)
 
-def gerar_thumbnail_google(prompt_texto, api_key):
+def gerar_thumbnail_google(prompt_texto, api_key=None):
     """
-    Gera imagem usando a API REST direta do Google (Bypassa problemas de biblioteca)
+    Gera thumbnail usando Pollinations.ai (Modelo FLUX)
+    Funciona instantaneamente sem necessidade de API Key do Google válida para imagens.
     """
     try:
-        # URL oficial da API do Imagen 3
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key={api_key}"
+        # Melhorando o prompt para garantir alta qualidade
+        prompt_melhorado = f"{prompt_texto}, youtube thumbnail, 8k, highly detailed, dramatic lighting"
         
-        headers = {
-            "Content-Type": "application/json"
-        }
+        # Codifica o texto para URL
+        prompt_encoded = urllib.parse.quote(prompt_melhorado)
         
-        payload = {
-            "instances": [
-                {
-                    "prompt": prompt_texto
-                }
-            ],
-            "parameters": {
-                "sampleCount": 1,
-                "aspectRatio": "16:9"
-            }
-        }
+        # URL Mágica (Gera em 1280x720 HD)
+        url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1280&height=720&model=flux&nologo=true"
         
-        # Faz a chamada direta (sem usar a biblioteca google-generativeai)
-        response = requests.post(url, headers=headers, json=payload)
+        # Faz o download da imagem gerada
+        response = requests.get(url, timeout=30)
         
-        if response.status_code != 200:
-            return f"Erro na API ({response.status_code}): {response.text}"
+        if response.status_code == 200:
+            image_data = response.content
+            return Image.open(io.BytesIO(image_data))
+        else:
+            return f"Erro na geração: Status {response.status_code}"
             
-        result = response.json()
-        
-        # A API retorna a imagem em Base64 string
-        if "predictions" in result:
-            b64_image = result["predictions"][0]["bytesBase64Encoded"]
-            
-            # Converte de volta para imagem
-            image_data = base64.b64decode(b64_image)
-            image = Image.open(io.BytesIO(image_data))
-            return image
-            
-        return f"Resposta inesperada da API: {result}"
-        
     except Exception as e:
         return f"Erro técnico ao gerar imagem: {str(e)}"
 
