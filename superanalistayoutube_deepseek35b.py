@@ -476,24 +476,39 @@ def get_binary_file_downloader_html(bin_data, file_label, file_name):
     return href
 
 def exportar_relatorio(conteudo, tipo_relatorio, projeto_info, formato="html"):
-    """Exporta relatório no formato especificado"""
+    """Exporta relatório no formato especificado (COM LIMPEZA DE DADOS)"""
     
+    # 1. LIMPEZA PROFUNDA (Igual fizemos no Main)
     if not conteudo:
         st.warning("Nenhum conteúdo para exportar")
         return None
+        
+    # Converte para string e remove metadados técnicos do Agente
+    conteudo_limpo = str(conteudo)
+    conteudo_limpo = re.sub(r"Message\(.*?\)", "", conteudo_limpo, flags=re.DOTALL)
+    conteudo_limpo = re.sub(r"content='(.*?)'", r"\1", conteudo_limpo, flags=re.DOTALL)
+    conteudo_limpo = re.sub(r"metrics=\{.*?\}", "", conteudo_limpo, flags=re.DOTALL)
+    conteudo_limpo = conteudo_limpo.replace("\\n", "\n").replace("content_type='str'", "")
+    
+    # Remove linhas vazias excessivas
+    conteudo_limpo = re.sub(r'\n\s*\n', '\n\n', conteudo_limpo)
     
     try:
-        # Limpar e formatar conteúdo
-        conteudo_limpo = limpar_conteudo_para_exportacao(conteudo)
-        
         # Nome do arquivo
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        codigo = projeto_info.get('codigo', projeto_info.get('codigo_projeto', 'projeto'))
+        if isinstance(projeto_info, dict):
+            codigo = projeto_info.get('codigo', projeto_info.get('codigo_projeto', 'projeto'))
+        else:
+            codigo = getattr(projeto_info, 'codigo_projeto', 'projeto') # Fallback se for objeto
         
         if tipo_relatorio == "hunter":
             prefixo = "HUNTER"
         elif tipo_relatorio == "booster":
             prefixo = "BOOSTER"
+        elif tipo_relatorio == "roteiro":
+            prefixo = "ROTEIRO"
+        elif tipo_relatorio == "full":
+            prefixo = "COMPLETO"
         else:
             prefixo = "CEO"
         
@@ -510,7 +525,7 @@ def exportar_relatorio(conteudo, tipo_relatorio, projeto_info, formato="html"):
             
             st.markdown(href, unsafe_allow_html=True)
             
-            # Também oferecer visualização
+            # Visualização rápida
             with st.expander("📋 Visualizar Documento"):
                 st.components.v1.html(html_content, height=600, scrolling=True)
             
@@ -520,27 +535,25 @@ def exportar_relatorio(conteudo, tipo_relatorio, projeto_info, formato="html"):
             # Gerar texto puro
             file_name = f"{prefixo}_{codigo}_{timestamp}.txt"
             txt_content = f"""
-            ============================================
-            RELATÓRIO {prefixo} - YouTube Automation CEO
-            ============================================
-            
-            Projeto: {codigo}
-            Nicho: {projeto_info.get('nicho', 'N/A')}
-            Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}
-            Ano: {ano_atual()}
-            
-            {'='*50}
-            
-            {conteudo_limpo}
-            
-            {'='*50}
-            
-            Documento gerado automaticamente
-            Sistema YouTube Automation CEO
-            © {ano_atual()} - Confidencial
+============================================
+RELATÓRIO {prefixo} - YouTube Automation CEO
+============================================
+
+Projeto: {codigo}
+Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+Ano: {ano_atual()}
+
+{'='*50}
+
+{conteudo_limpo}
+
+{'='*50}
+
+Documento gerado automaticamente
+Sistema YouTube Automation CEO
+© {ano_atual()} - Confidencial
             """
             
-            # Botão de download
             st.download_button(
                 label="📝 Download TXT",
                 data=txt_content,
@@ -554,7 +567,7 @@ def exportar_relatorio(conteudo, tipo_relatorio, projeto_info, formato="html"):
     except Exception as e:
         st.error(f"Erro ao exportar relatório: {e}")
         return None
-
+    
 # 4. GERENTE EXECUTIVO (CEO)
 @st.cache_resource
 def criar_gerente_executivo():
