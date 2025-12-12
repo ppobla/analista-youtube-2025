@@ -8,6 +8,9 @@ import re
 import base64
 from datetime import datetime
 import pandas as pd
+import google.generativeai as genai
+from PIL import Image
+import io
 from googleapiclient.discovery import build
 
 # Importações da IA (Agno/Phi)
@@ -696,6 +699,28 @@ def criar_agente_booster():
             "RETORNE APENAS O CONTEÚDO DA RESPOSTA, SEM METADADOS TÉCNICOS.",
             "USE MARKDOWN PARA FORMATAÇÃO CLARA E PROFISSIONAL."
         ],
+        def gerar_thumbnail_google(prompt_texto, api_key):
+    """
+    Gera imagem usando o Google Imagen 3 (via Gemini API)
+    """
+    try:
+        genai.configure(api_key=api_key)
+        
+        # O modelo de imagem do Google se chama 'imagen-3.0-generate-001'
+        # Se der erro de modelo, tente 'imagen-2'
+        modelo_imagem = genai.ImageGenerationModel("imagen-3.0-generate-001")
+        
+        response = modelo_imagem.generate_images(
+            prompt=prompt_texto,
+            number_of_images=1,
+            aspect_ratio="16:9", # Perfeito para YouTube
+            safety_filter_level="block_only_high",
+        )
+        
+        # Retorna a imagem propriamente dita
+        return response.images[0]
+    except Exception as e:
+        return f"Erro ao gerar imagem no Google: {str(e)}"
         markdown=True
     )
 def criar_agente_copywriter():
@@ -1440,6 +1465,55 @@ def main():
                     {booster_content}
                     </div>
                     """, unsafe_allow_html=True)
+
+                    # --- NOVO: GERADOR DE THUMBNAIL GOOGLE ---
+                    st.markdown("---")
+                    st.subheader("🎨 Estúdio de Criação (Google Imagen)")
+                    
+                    # Tenta extrair o prompt automaticamente do texto do Booster
+                    prompt_sugerido = ""
+                    if "A CENA É:" in booster_content:
+                        partes = booster_content.split("A CENA É:")
+                        if len(partes) > 1:
+                            # Pega o texto depois de "A CENA É:" até o fim da linha ou bloco
+                            prompt_sugerido = partes[1].split("```")[0].strip()
+                            # Adiciona o estilo automaticamente
+                            prompt_completo = f"Thumbnail YouTube, 8k resolution, cinematic lighting, vibrant high contrast. Scene: {prompt_sugerido}"
+                    else:
+                        prompt_completo = "YouTube thumbnail, high contrast, money and success theme, 8k."
+
+                    # Campo para você editar o prompt se quiser
+                    prompt_final = st.text_area("Prompt da Thumbnail:", value=prompt_completo, height=100)
+                    
+                    # O Botão Mágico
+                    if st.button("✨ Gerar Thumbnail com IA do Google", type="primary"):
+                        # Precisamos de uma chave API do Google (AI Studio)
+                        # Tenta usar a mesma do YouTube ou pede uma específica
+                        api_key_google = st.session_state.get('temp_keys', {}).get('DEEPSEEK_API_KEY') 
+                        # OBS: O ideal é ter uma chave GOOGLE_API_KEY separada, mas às vezes a do YouTube funciona se tiver permissão.
+                        # Se não tiver, vamos pedir aqui:
+                        
+                        chave_google = st.text_input("Cole sua Google API Key (Gemini/AI Studio) se for diferente da configurada:", type="password")
+                        if not chave_google:
+                             # Tenta usar uma variável de ambiente se existir
+                             chave_google = os.getenv("GOOGLE_API_KEY")
+
+                        if chave_google:
+                            with st.spinner("🎨 O Google está pintando sua thumbnail..."):
+                                imagem_gerada = gerar_thumbnail_google(prompt_final, chave_google)
+                                
+                                if isinstance(imagem_gerada, str) and "Erro" in imagem_gerada:
+                                    st.error(imagem_gerada)
+                                else:
+                                    # Mostra a imagem!
+                                    st.image(imagem_gerada, caption="Thumbnail Gerada pelo Google Imagen 3", use_column_width=True)
+                                    
+                                    # Botão de Download da Imagem
+                                    # (Lógica simples para baixar)
+                                    # st.download_button... (requires converting PIL to bytes)
+                        else:
+                            st.warning("Preciso de uma Google API Key (AI Studio) para gerar imagens.")
+                    # -----------------------------------------
                     
                     # BOTÕES DE EXPORTAÇÃO PARA BOOSTER
                     st.markdown("---")
