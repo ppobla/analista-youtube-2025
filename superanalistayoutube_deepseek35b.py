@@ -658,7 +658,6 @@ def criar_agente_hunter():
         show_tool_calls=True, # Dica: Deixe True no início para ver se ele está usando a ferramenta
         markdown=True
     )
-
 def criar_agente_booster():
     ano = ano_atual()
     return Agent(
@@ -699,7 +698,11 @@ def criar_agente_booster():
             "RETORNE APENAS O CONTEÚDO DA RESPOSTA, SEM METADADOS TÉCNICOS.",
             "USE MARKDOWN PARA FORMATAÇÃO CLARA E PROFISSIONAL."
         ],
-        def gerar_thumbnail_google(prompt_texto, api_key):
+        markdown=True
+    )
+
+# --- AQUI É O LUGAR CORRETO DA FUNÇÃO DE IMAGEM ---
+def gerar_thumbnail_google(prompt_texto, api_key):
     """
     Gera imagem usando o Google Imagen 3 (via Gemini API)
     """
@@ -707,22 +710,27 @@ def criar_agente_booster():
         genai.configure(api_key=api_key)
         
         # O modelo de imagem do Google se chama 'imagen-3.0-generate-001'
-        # Se der erro de modelo, tente 'imagen-2'
-        modelo_imagem = genai.ImageGenerationModel("imagen-3.0-generate-001")
-        
-        response = modelo_imagem.generate_images(
-            prompt=prompt_texto,
-            number_of_images=1,
-            aspect_ratio="16:9", # Perfeito para YouTube
-            safety_filter_level="block_only_high",
-        )
+        try:
+            modelo_imagem = genai.ImageGenerationModel("imagen-3.0-generate-001")
+            response = modelo_imagem.generate_images(
+                prompt=prompt_texto,
+                number_of_images=1,
+                aspect_ratio="16:9", # Perfeito para YouTube
+                safety_filter_level="block_only_high",
+            )
+        except:
+            # Fallback se o modelo 3.0 falhar
+            modelo_imagem = genai.ImageGenerationModel("imagen-2")
+            response = modelo_imagem.generate_images(
+                prompt=prompt_texto,
+                number_of_images=1
+            )
         
         # Retorna a imagem propriamente dita
         return response.images[0]
     except Exception as e:
         return f"Erro ao gerar imagem no Google: {str(e)}"
-        markdown=True
-    )
+
 def criar_agente_copywriter():
     ano = ano_atual()
     return Agent(
@@ -821,6 +829,7 @@ def extrair_texto_principal(resposta):
             return match.group(1)
     
     return resposta_str
+
 
 # 7. SISTEMA DE ORQUESTRAÇÃO
 class SistemaYouTubeAutomation:
@@ -1468,7 +1477,7 @@ def main():
 
                     # --- NOVO: GERADOR DE THUMBNAIL GOOGLE ---
                     st.markdown("---")
-                    st.subheader("🎨 Estúdio de Criação (Google Imagen)")
+                    st.subheader("🎨 Estúdio de Criação (Google Imagem)")
                     
                     # Tenta extrair o prompt automaticamente do texto do Booster
                     prompt_sugerido = ""
