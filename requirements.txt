@@ -1,5 +1,5 @@
 streamlit
-phi
+phidata
 openai
 supabase
 gotrue
@@ -10,3 +10,4 @@ duckduckgo-search
 toml
 pyyaml
 streamlit-authenticator
+pydantic
