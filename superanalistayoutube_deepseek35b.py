@@ -1,59 +1,141 @@
-# youtube_automation_ceo.py - SISTEMA COMPLETO COM EXPORTAÇÃO
 import streamlit as st
-from phi.agent import Agent
-from phi.model.deepseek import DeepSeekChat
-from phi.tools.duckduckgo import DuckDuckGo
-from dotenv import load_dotenv  # <--- ESSA LINHA É CRUCIAL
-import os
-import sqlite3
-import json
-from datetime import datetime
-import pandas as pd
-import hashlib
-import re
-import base64
-from io import BytesIO
-
-# Importações Novas (Supabase e Google)
 from supabase import create_client, Client
-from googleapiclient.discovery import build
+from gotrue.errors import AuthApiError
+import os
+import toml
 
-# ✅ CARREGAR .env (ISSO IMPEDE O ERRO NO SEU PC)
-load_dotenv() 
-
-# 1. CONFIGURAÇÃO DE CHAVES (Com proteção contra erro local)
-def get_secret(key_name):
-    """Tenta pegar do .env primeiro, depois tenta st.secrets"""
-    # 1. Tenta pegar do sistema (.env carregado)
-    value = os.getenv(key_name)
-    if value:
-        return value
+# --- 1. FUNÇÃO PARA CARREGAR CHAVES (HÍBRIDA) ---
+def carregar_chaves_seguras():
+    """Tenta carregar chaves do Streamlit Cloud ou pede na tela se não achar"""
+    chaves = {
+        "DEEPSEEK_API_KEY": st.secrets.get("DEEPSEEK_API_KEY"),
+        "SUPABASE_URL": st.secrets.get("SUPABASE_URL"),
+        "SUPABASE_KEY": st.secrets.get("SUPABASE_KEY"),
+        "YOUTUBE_API_KEY": st.secrets.get("YOUTUBE_API_KEY")
+    }
     
-    # 2. Se não achar, tenta st.secrets (mas protege contra erro se não existir)
+    # Se estiver rodando local e tiver arquivo .env ou secrets.toml, tenta carregar
+    if not all(chaves.values()):
+        try:
+            import dotenv
+            dotenv.load_dotenv()
+            for k in chaves:
+                if not chaves[k]: chaves[k] = os.getenv(k)
+        except:
+            pass
+
+    # Verifica se ainda falta algo
+    if not all(chaves.values()):
+        return None # Retorna None para indicar que precisa configurar
+    return chaves
+
+# --- 2. SISTEMA DE LOGIN (SUPABASE AUTH) ---
+def tela_login(supabase_client):
+    """Renderiza a tela de login e gerencia a autenticação"""
+    
+    # CSS para deixar a tela bonita
+    st.markdown("""
+    <style>
+        .box-login {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 30px;
+            border-radius: 10px;
+            background-color: #f0f2f6;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .titulo-login { text-align: center; color: #1e3a8a; margin-bottom: 20px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<h1 class='titulo-login'>🔐 Acesso Restrito</h1>", unsafe_allow_html=True)
+        st.markdown("<div class='box-login'>", unsafe_allow_html=True)
+        
+        email = st.text_input("E-mail", placeholder="seu@email.com")
+        senha = st.text_input("Senha", type="password", placeholder="••••••••")
+        
+        col_entrar, col_criar = st.columns(2)
+        
+        with col_entrar:
+            if st.button("Entrar", type="primary", use_container_width=True):
+                try:
+                    # A mágica do Supabase acontece aqui
+                    sessao = supabase_client.auth.sign_in_with_password({"email": email, "password": senha})
+                    st.session_state['user'] = sessao.user
+                    st.session_state['access_token'] = sessao.session.access_token
+                    st.success("Login realizado! Redirecionando...")
+                    st.rerun()
+                except AuthApiError as e:
+                    st.error(f"Erro de login: {e.message}")
+                except Exception as e:
+                    st.error(f"Erro inesperado: {str(e)}")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# --- 3. TELA DE CONFIGURAÇÃO INICIAL (SETUP) ---
+def tela_configuracao_inicial():
+    st.warning("⚠️ Sistema não configurado. Insira as chaves para conectar ao servidor.")
+    with st.form("setup_keys"):
+        supa_url = st.text_input("Supabase URL")
+        supa_key = st.text_input("Supabase Key (Anon)")
+        deepseek = st.text_input("DeepSeek API Key", type="password")
+        youtube = st.text_input("YouTube API Key", type="password")
+        
+        if st.form_submit_button("Salvar e Conectar"):
+            # Salva na sessão para usar agora
+            st.session_state['temp_keys'] = {
+                "SUPABASE_URL": supa_url,
+                "SUPABASE_KEY": supa_key,
+                "DEEPSEEK_API_KEY": deepseek,
+                "YOUTUBE_API_KEY": youtube
+            }
+            st.rerun()
+
+# --- 4. FUNÇÃO PRINCIPAL MODIFICADA ---
+def main():
+    st.set_page_config(page_title="YouTube Automation CEO", page_icon="🎬", layout="wide")
+
+    # A. Carrega chaves (Do arquivo ou da sessão temporária)
+    keys = carregar_chaves_seguras()
+    if not keys and 'temp_keys' in st.session_state:
+        keys = st.session_state['temp_keys']
+
+    # B. Se não tem chaves, mostra tela de Configuração e PARA
+    if not keys:
+        tela_configuracao_inicial()
+        st.stop()
+
+    # C. Inicializa Supabase (Necessário para o login)
     try:
-        if key_name in st.secrets:
-            return st.secrets[key_name]
-    except FileNotFoundError:
-        pass # Ignora erro se não tiver secrets.toml local
-    return None
+        supabase = create_client(keys["SUPABASE_URL"], keys["SUPABASE_KEY"])
+    except Exception as e:
+        st.error(f"Erro ao conectar no banco de dados: {e}")
+        st.stop()
 
-# Carregar chaves usando a função segura
-DEEPSEEK_API_KEY = get_secret("DEEPSEEK_API_KEY")
-SUPABASE_URL = get_secret("SUPABASE_URL")
-SUPABASE_KEY = get_secret("SUPABASE_KEY")
-YOUTUBE_API_KEY = get_secret("YOUTUBE_API_KEY")
+    # D. Verifica Login
+    if 'user' not in st.session_state:
+        tela_login(supabase)
+        st.stop() # PARA TUDO se não estiver logado
 
-# Validação
-if not all([DEEPSEEK_API_KEY, SUPABASE_URL, SUPABASE_KEY, YOUTUBE_API_KEY]):
-    st.error("⚠️ Faltam chaves de API! Verifique se o arquivo .env está na pasta correta e preenchido.")
-    st.stop()
+    # --- SE CHEGOU AQUI, O USUÁRIO ESTÁ LOGADO E AS CHAVES ESTÃO OK ---
+    
+    # Sidebar com Logout
+    with st.sidebar:
+        st.write(f"👤 **{st.session_state['user'].email}**")
+        if st.button("Sair (Logout)"):
+            supabase.auth.sign_out()
+            del st.session_state['user']
+            st.rerun()
+        st.divider()
 
-# Inicializar cliente Supabase Global
-try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    st.error(f"Erro ao conectar no Supabase: {e}")
-    st.stop()
+    # Define as variáveis globais para o resto do script usar
+    global DEEPSEEK_API_KEY, SUPABASE_URL, SUPABASE_KEY, YOUTUBE_API_KEY
+    DEEPSEEK_API_KEY = keys["DEEPSEEK_API_KEY"]
+    SUPABASE_URL = keys["SUPABASE_URL"]
+    SUPABASE_KEY = keys["SUPABASE_KEY"]
+    YOUTUBE_API_KEY = keys["YOUTUBE_API_KEY"]
 
 # ... O RESTO DO CÓDIGO CONTINUA IGUAL ...
 
