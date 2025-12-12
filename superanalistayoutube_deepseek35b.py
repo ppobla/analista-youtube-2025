@@ -1496,7 +1496,7 @@ def main():
 
                     # --- NOVO: GERADOR DE THUMBNAIL GOOGLE ---
                     st.markdown("---")
-                    st.subheader("🎨 Estúdio de Criação (Google Imagem)")
+                    st.subheader("🎨 Estúdio de Criação (Google Imagen)")
                     
                     # Tenta extrair o prompt automaticamente do texto do Booster
                     prompt_sugerido = ""
