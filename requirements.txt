@@ -11,3 +11,5 @@ toml
 pyyaml
 streamlit-authenticator
 pydantic
+google-generativeai
+
