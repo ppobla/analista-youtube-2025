@@ -527,7 +527,7 @@ def exportar_relatorio(conteudo, tipo_relatorio, projeto_info, formato="html"):
 
 # 4. GERENTE EXECUTIVO (CEO)
     @st.cache_resource
-    def criar_gerente_executivo():
+def criar_gerente_executivo():
     ano = ano_atual()
     return Agent(
         model=DeepSeekChat(api_key=DEEPSEEK_API_KEY, temperature=0.7),
