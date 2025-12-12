@@ -1683,17 +1683,21 @@ def main():
             except Exception as e:
                 print(f"Erro no Regex: {e}")
 
-            # 3. EXIBIÇÃO
+            # 3. EXIBIÇÃO (SEM CORTES DE TEXTO)
             col_passo1, col_passo2, col_passo3 = st.columns(3)
             
             with col_passo1:
-                st.info(f"**🔥 Ferramentas & Ação**\n\n{acao_hoje[:400]}")
+                # Removi o limite [:400] para não cortar a lista de ferramentas
+                st.info(f"**🔥 Ferramentas & Ação**\n\n{acao_hoje}")
             
             with col_passo2:
-                st.warning(f"**💰 Budget Real**\n\n{investimento[:300]}")
+                # Removi o limite [:300]
+                st.warning(f"**💰 Budget Real**\n\n{investimento}")
             
             with col_passo3:
-                st.success(f"**🗓️ Cronograma Tático**\n\n{plano_semana[:400]}")
+                # Removi o limite [:400] -> Agora o cronograma vai aparecer inteiro até o dia 7
+                st.success(f"**🗓️ Cronograma Tático**\n\n{plano_semana}")
+            
             # ---------------------------------------------------------
             # Exportação completa do projeto
             st.markdown("---")
